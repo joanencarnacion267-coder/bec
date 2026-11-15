@@ -332,7 +332,7 @@ esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 SBc=()=>window.jsSB||{},seen={};let health=[],lastSnack=0;
 function note(msg,src,sev){msg=String(msg).slice(0,240);const k=msg+src;if(seen[k])return;seen[k]=1;const d=dg(msg),a=ld();
  a.push({t:Date.now(),msg,src:String(src||''),sev:sev||'error',c:d.c,s:d.s});sv(a);
- if(sev!=='info'&&window.becReportError)try{window.becReportError(msg+' → '+d.s.slice(0,110),src)}catch(e){}badge()}
+ if(sev!=='info'&&window.becReportError)try{window.becReportError(msg,src)}catch(e){}badge()}
 /* Mensaje amable (máx. 1 cada 20 s) */
 function snack(t){if(Date.now()-lastSnack<2e4)return;lastSnack=Date.now();const e=document.createElement('div');e.setAttribute('role','alert');
  e.style.cssText='position:fixed;left:14px;right:14px;bottom:96px;z-index:9998;background:#7f1d1d;color:#fff;padding:12px 14px;border-radius:14px;font-size:14px;text-align:center;box-shadow:0 10px 26px rgba(0,0,0,.35)';
@@ -366,7 +366,7 @@ setTimeout(chk,3000);setInterval(chk,3e5);
 setTimeout(()=>{const a=document.getElementById('app');if(a&&a.querySelector('.skw')){note('La pantalla inicial quedó cargando','arranque');
  a.innerHTML='<div class="c" style="padding:30vh 20px 0"><h3>No pudimos cargar la app</h3><p class="m">Revisa tu conexión e inténtalo de nuevo.</p><button onclick="location.reload()">Recargar</button></div>'}},15000);
 /* Panel del administrador */
-const D=window.becDiag={health:[],run:chk,report:()=>ld()};
+const D=window.becDiag={health:[],run:chk,report:()=>ld(),dg:dg};
 let bt;function badge(){if(!bt)return;const n=ld().filter(x=>x.sev==='error').length+health.filter(x=>!x.g).length;bt.dataset.n=n;bt.textContent='🩺'+(n?' '+n:'')}
 function adm(){try{return !!((window.jsIsAdmin&&window.jsIsAdmin())||(typeof isA!=='undefined'&&isA))}catch(e){return false}}
 function panel(rows){let o=document.getElementById('bec-dg');if(o)o.remove();o=document.createElement('div');o.id='bec-dg';
@@ -4270,6 +4270,49 @@ window.vfPurge=async function(){if(!confirm('Se eliminarán los documentos que s
  if(p.length){var r=await SB().api('/storage/v1/object/kyc',{m:'DELETE',b:{prefixes:p}});if(!r.ok)return msg('No se pudieron borrar los archivos. Inténtalo de nuevo.');await rpc('vf_purge_ack',{p_paths:p})}msg('✓ '+p.length+' archivo(s) eliminados')}catch(e){msg(e.message)}};
 var ad0=window.admin;if(typeof ad0=='function')window.admin=function(){var r=ad0.apply(this,arguments);try{var h=document.querySelector('#app .adm')||app();if(h&&!document.getElementById('vf-ab')){var b=document.createElement('div');b.id='vf-ab';b.className='card vf-li';b.onclick=function(){window.vfAdmin()};b.innerHTML='<div><b>🛡️ Centro de verificaciones</b><br><small class="m">Revisar documentos, aprobar o rechazar y configurar requisitos</small></div><span>›</span>';h.insertBefore(b,h.children[1]||null)}}catch(e){}return r};
 var st=document.createElement('style');st.textContent='.vf-hero{text-align:center;padding:24px 18px;border-radius:22px;border:1px solid var(--bd);background:var(--card);margin-bottom:12px}.vf-ic2{width:68px;height:68px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;background:var(--bg)}.vf-chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--c);border:1px solid var(--c)}.vf-why{text-align:left;border:1px solid var(--er);border-radius:14px;padding:10px 12px;margin:10px 0;font-size:14px}.vf-why b{display:block;color:var(--er);margin-bottom:2px}.vf-tl{list-style:none;display:flex;justify-content:center;gap:14px;padding:0;margin:14px 0;font-size:12px;color:var(--mu)}.vf-tl li i{display:block;width:12px;height:12px;border-radius:50%;background:var(--bd);margin:0 auto 4px}.vf-tl .done i,.vf-tl .now i{background:var(--ok)}.vf-tl .now{color:var(--tx);font-weight:700}.vf-pg{margin:6px 0 10px}.vf-bar{height:8px;border-radius:99px;background:var(--bd);overflow:hidden;margin-top:6px}.vf-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}.vf-h{margin:18px 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)}.vf-up{position:relative;display:flex;gap:12px;align-items:center;padding:12px;margin:8px 0;border:1.5px dashed var(--bd);border-radius:14px;cursor:pointer}.vf-up.has{border-style:solid;border-color:var(--ok)}.vf-up.busy{opacity:.5}.vf-up span{font-size:22px}.vf-up small{display:block;color:var(--mu)}.vf-up input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}.vf-tips{margin:10px 0;padding:10px 12px 10px 28px;border-radius:12px;background:var(--bg);font-size:13px;color:var(--mu)}.vf-seg{display:flex;gap:6px;margin:8px 0;overflow-x:auto}.vf-seg button{width:auto;margin:0;padding:8px 14px;border-radius:999px;background:var(--bg)!important;color:var(--tx)!important;border:1px solid var(--bd)!important;font-size:13px}.vf-seg button.on{background:var(--pr)!important;color:var(--pt)!important}.vf-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd);font-size:14px}.vf-box{margin-top:12px;padding:12px;border-radius:14px;background:var(--bg)}.vf-li{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}';document.head.appendChild(st);
+})();
+</script>
+<script id="er-v1-js">
+(function(){
+/* BEC · Panel «Errores» del administrador: errores reales de usuarios y del sitio, con causa y solución sugerida */
+var SB=function(){return window.jsSB},E=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var app=function(){return document.getElementById('app')},$=function(s){return document.querySelector(s)},isAd=function(){try{return !!(window.jsIsAdmin&&window.jsIsAdmin())}catch(e){return false}};
+var Z={f:'open',g:[],on:0,known:{},open:0};
+function dg(m){try{return window.becDiag.dg(m)}catch(e){return{c:'Causa no catalogada.',s:'Revisa el archivo:línea y el stack.'}}}
+function msg(t){try{toast(t)}catch(e){alert(t)}}
+async function pull(){var r=await SB().api('/rest/v1/error_log?select=*&order=created_at.desc&limit=400');
+ if(!r.ok)throw new Error(r.s==404||r.s==400?'Falta ejecutar errores_backend.sql en Supabase.':'No se pudieron leer los errores.');return r.j||[]}
+function group(rows){var m={},o=[];rows.forEach(function(r){var k=String(r.msg||'').slice(0,140)+'|'+String(r.src||'').slice(0,60),g=m[k];
+ if(!g){g=m[k]={k:k,msg:r.msg,src:r.src,stack:r.stack,screen:r.screen,url:r.url,ua:r.ua,n:0,users:{},last:r.created_at,first:r.created_at,ids:[],open:0,res:null};o.push(g)}
+ g.n++;g.ids.push(r.id);if(r.user_email)g.users[r.user_email]=1;if(r.created_at<g.first)g.first=r.created_at;if(r.status!='resolved')g.open=1;else if(!g.res&&r.resolution)g.res=r.resolution});
+ return o}
+function sev(g){return /HTTP 5|is not defined|is not a function|reading '|Cannot read|row-level|42501/i.test(g.msg||'')?['Alto','#b91c1c']:['Medio','#b45309']}
+function when(t){try{return new Date(t).toLocaleString('es-DO',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}catch(e){return ''}}
+function report(g){var d=dg(g.msg);return ['ERROR EN BEC','Mensaje: '+g.msg,'Dónde: '+(g.src||'—')+' · pantalla: '+(g.screen||'—')+' · '+(g.url||''),'Veces: '+g.n+' · usuarios afectados: '+Object.keys(g.users).length+' · último: '+when(g.last),'Navegador: '+(g.ua||'—'),g.stack?'Stack: '+g.stack:'','Diagnóstico automático: '+d.c+' → '+d.s,'','Claude: dime la causa raíz y el arreglo exacto (línea de código de index.html o SQL de Supabase).'].filter(function(x){return x!==''||true}).join('\n')}
+function top(){return '<div class="top"><button class="s" style="width:auto;margin:0" onclick="admin()">←</button><h2 style="margin:0">Errores</h2></div>'}
+window.erAdmin=async function(){if(!isAd())return;Z.open=1;
+ if(!$('#er-list'))app().innerHTML=top()+'<div class="card"><div class="sk"></div><div class="sk"></div></div>';
+ var rows;try{rows=await pull()}catch(e){app().innerHTML=top()+'<div class="card err">'+E(e.message)+'</div>';return}
+ Z.g=group(rows);var nw=0;Z.g.forEach(function(g){if(Z.known[g.k]===undefined)Z.known[g.k]=g.n;else if(g.n>Z.known[g.k]){nw++;Z.known[g.k]=g.n}});if(nw&&$('#er-list'))msg('● '+nw+' error(es) nuevo(s)');
+ paint()};
+function paint(){var h=window.becDiag&&window.becDiag.health||[],bad=h.filter(function(x){return !x.g}),L=Z.g.filter(function(g){return Z.f=='open'?g.open:!g.open}),res={};Z.g.forEach(function(g){if(!g.open&&g.res)res[g.k]=g.res});
+ var o=Z.g.filter(function(g){return g.open}).length;
+ app().innerHTML=top()+'<div class="vf-seg"><button class="'+(Z.f=='open'?'on':'')+'" onclick="erF(\'open\')">Abiertos ('+o+')</button><button class="'+(Z.f=='res'?'on':'')+'" onclick="erF(\'res\')">Resueltos</button><button class="s" onclick="erClean()">Limpiar viejos</button></div>'+
+ '<div class="card"><b>Chequeo de este dispositivo</b> <small class="m">(se actualiza solo)</small>'+(bad.length?bad.map(function(x){return '<p style="margin:6px 0">❌ '+E(x.n)+'<br><small class="m">→ '+E(x.d)+'</small></p>'}).join(''):'<p class="ok" style="margin:6px 0">✅ Sin problemas detectados</p>')+'<button class="s" onclick="becDiag.run().then(erAdmin)">Re-diagnosticar</button><small class="m">Actualización automática cada 8 s · errores de todos los usuarios</small></div><div id="er-list">'+
+ (L.length?L.map(function(g,i){var s=sev(g),d=dg(g.msg),prev=res[g.k];return '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><b style="word-break:break-word">'+E(g.msg)+'</b><span class="vf-chip" style="--c:'+s[1]+';white-space:nowrap">'+s[0]+'</span></div><small class="m">'+E(g.src||'—')+(g.screen?' · pantalla: '+E(g.screen):'')+' · '+g.n+' '+(g.n==1?'vez':'veces')+' · '+Object.keys(g.users).length+' usuario(s) · último '+E(when(g.last))+'</small>'+
+  '<div class="vf-box" style="margin-top:8px"><p style="margin:0 0 4px"><b>Causa:</b> '+E(d.c)+'</p><p style="margin:0"><b>Solución:</b> '+E(d.s)+'</p></div>'+(prev?'<p class="ok" style="margin:6px 0">Ya se resolvió antes así: '+E(prev)+'</p>':'')+(g.open?'':'<p class="ok" style="margin:6px 0">✓ Resuelto'+(g.res?': '+E(g.res):'')+'</p>')+
+  (g.open?'<textarea id="er-n'+i+'" rows="2" placeholder="Solución que aplicaste (opcional, queda como historial)"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="s" onclick="erCopy('+i+')">Copiar para Claude</button><button onclick="erRes('+i+')">Marcar resuelto</button></div>':'<button class="s" onclick="erCopy('+i+')">Copiar para Claude</button>')+'</div>'}).join(''):'<div class="bs-state"><div class="bs-ic">✅</div><h3>'+(Z.f=='open'?'Sin errores abiertos':'Nada resuelto aún')+'</h3><p>'+(Z.f=='open'?'Si esperas ver errores y no aparecen, confirma que ejecutaste errores_backend.sql y que tu usuario está en vf_staff.':'')+'</p></div>')+'</div>'}
+function cur(i){var L=Z.g.filter(function(g){return Z.f=='open'?g.open:!g.open});return L[i]}
+window.erF=function(f){Z.f=f;paint()};
+window.erCopy=function(i){var t=report(cur(i));try{navigator.clipboard.writeText(t).then(function(){msg('✓ Copiado. Pégalo en el chat con Claude')},fb)}catch(e){fb()}function fb(){var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');msg('✓ Copiado. Pégalo en el chat con Claude')}catch(e){msg('No se pudo copiar')}a.remove()}};
+window.erRes=async function(i){var g=cur(i),n=(($('#er-n'+i)||{}).value||'').trim(),who='';try{who=users[me].profile&&users[me].profile.nm||me}catch(e){}
+ var r=await SB().api('/rest/v1/error_log?id=in.('+g.ids.join(',')+')',{m:'PATCH',b:{status:'resolved',resolution:n||null,resolved_by:String(who).slice(0,80),resolved_at:new Date().toISOString()}});
+ if(r.ok){msg('✓ Marcado como resuelto');erAdmin()}else msg('No se pudo guardar (¿tu usuario está en vf_staff?)')};
+window.erClean=async function(){var r=await SB().api('/rest/v1/rpc/err_cleanup',{m:'POST',b:{}});msg(r.ok?'✓ Limpieza hecha':'No se pudo limpiar');erAdmin()};
+setInterval(function(){if(Z.open&&$('#er-list')&&isAd()&&!document.hidden)erAdmin();else if(!$('#er-list'))Z.open=0},8000);
+/* botón dentro del panel de administración + contador */
+async function badge(){if(!isAd()||!SB())return;try{var r=await SB().api('/rest/v1/error_log?select=id&status=eq.open&limit=1',{h:{Prefer:'count=exact'}});var b=document.getElementById('er-ab');if(b&&r.ok){var c=(r.j||[]).length;var s=b.querySelector('b');if(s)s.textContent='🐞 Errores'+(c?' ●':'')}}catch(e){}}
+var ad0=window.admin;if(typeof ad0=='function')window.admin=function(){var r=ad0.apply(this,arguments);Z.open=0;try{var h=document.querySelector('#app .adm')||app();if(h&&!document.getElementById('er-ab')){var b=document.createElement('div');b.id='er-ab';b.className='card vf-li';b.onclick=function(){window.erAdmin()};b.innerHTML='<div><b>🐞 Errores</b><br><small class="m">Errores del sitio y de los usuarios, con la solución sugerida</small></div><span>›</span>';h.insertBefore(b,h.children[1]||null);badge()}}catch(e){}return r};
 })();
 </script>
 
