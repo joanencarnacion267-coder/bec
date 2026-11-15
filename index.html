@@ -4413,4 +4413,47 @@ html body nav{z-index:60!important;pointer-events:auto!important}
 html body nav>a{pointer-events:auto!important}
 /* La barra inferior siempre visible (ya no se esconde al deslizar) */
 html body nav.nv-h{translate:none!important}
-</style></body></html>
+</style><style id="bec-polish">
+/* ===== 1) Nada se sale de la pantalla ni se mueve hacia los lados ===== */
+html,body{max-width:100%;overflow-x:hidden;overscroll-behavior-x:none}
+@supports (overflow:clip){html,body{overflow-x:clip}}
+/* Textos largos (correos, nombres, enlaces) se parten en vez de empujar la página */
+#app{overflow-wrap:anywhere}
+#app .jh>:not(.av):not(.pav),#app .ac-hero>*,#app .pp-id>*,#app .card>*{min-width:0;max-width:100%}
+#app .ac-hero p,#app .ac-hero h2,#app .jh p,#app .jh h3,#app .jh h2,#app .pp-id p,#app .pp-id h2{overflow-wrap:anywhere;word-break:break-word}
+#app .ac-sec button.s span{min-width:0;overflow-wrap:anywhere}
+#app img,#app video,#app canvas{max-width:100%}
+#app textarea,#app input,#app select{max-width:100%}
+
+/* ===== 2) Carrito más profesional ===== */
+#app{counter-reset:ctb}
+#app .ct-sub{margin:-2px 2px 14px;font-size:13.5px}
+#app .ct-it{align-items:flex-start;padding:16px 14px;border-radius:22px}
+#app .ct-im{width:72px;height:72px;border-radius:18px;font-size:32px}
+#app .ct-in h3{font-size:16.5px;font-weight:700;margin:0 30px 3px 0}
+#app .ct-in p{font-size:13px}
+#app .ct-in p::before{content:"Vendido por ";opacity:.8}
+#app .ct-up{margin-top:4px;font-size:12.5px}
+#app .ct-ft{margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
+#app .ct-q button{width:42px!important;height:42px!important;font-size:22px!important}
+#app .ct-q span{min-width:32px;font-size:16px}
+#app .ct-sb{font-size:17px;font-weight:800;letter-spacing:-.01em}
+#app .ct-box{border-radius:22px;padding:18px 16px}
+#app .ct-box:not(.ct-sum) h3{display:flex;align-items:center;gap:10px;margin:0 0 14px;font-size:16px;font-weight:700}
+#app .ct-box:not(.ct-sum) h3::before{counter-increment:ctb;content:counter(ctb);flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--pr);color:var(--pt);font-size:12.5px;font-weight:700}
+#app .ct-box textarea{min-height:92px;padding:12px 14px;border-radius:14px}
+#app .ct-seg{border-radius:18px}
+#app .ct-seg button{min-height:46px!important;font-size:14px!important}
+#app .ct-opts button{padding:14px 15px!important;border-radius:18px!important}
+#app .ct-opts button b{font-size:15px}
+#app .ct-sum{padding:6px 16px;border-radius:22px}
+#app .ct-r{padding:12px 0}
+#app .ct-r b{max-width:62%}
+#app .ct-tot{padding-top:14px;border-top:1px dashed var(--bd)}
+#app .ct-tot span{font-weight:700}
+#app .ct-tot b{font-size:24px;font-weight:800;letter-spacing:-.02em}
+#app .ct-go{min-height:56px!important;border-radius:18px!important;font-size:16.5px!important;font-weight:800!important;margin-top:8px!important}
+#app .ct-note{margin:14px 10px 6px;font-size:12.5px}
+#app .ct-empty{border-radius:24px}
+</style>
+</body></html>
