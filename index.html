@@ -880,8 +880,8 @@ function alCard(){const a=users[me].al||[];return `<div class="card"><h3>🔔 Mi
 function alertsFor(j){const t=(j.r+' '+j.e+' '+j.l).toLowerCase();Object.entries(users).forEach(([e,u])=>{if(u.role=='co'||u.role=='cl'||!u.al||e==me)return;if(u.al.some(a=>(!a.q||t.includes(a.q))&&(a.c=='Todos'||a.c==j.c)&&(a.p=='Todas'||!j.pv||a.p==j.pv)))notify(e,'🔔 Nueva oferta: '+j.r+' en '+j.e)})}
 /* Avisos del navegador */
 function pnBtn(){const on=ls.g('ey_pn',0)&&window.Notification&&Notification.permission=='granted';return `<button class="s" onclick="${on?'pnOff()':'pnOn()'}">🔔 Avisos en el celular: ${on?'Activados':'Desactivados'}</button>`}
-function pnOn(){if(!window.Notification)return toast('Tu navegador no soporta avisos');Notification.requestPermission().then(p=>{if(p=='granted'){ls.s('ey_pn',1);ls.s('ey_pnl',Date.now());toast('Avisos activados');route()}else toast('Permiso denegado en el navegador')})}
-function pnOff(){ls.s('ey_pn',0);toast('Avisos desactivados');route()}
+function pnOn(){if(!window.Notification)return toast('Tu navegador no soporta avisos');Notification.requestPermission().then(p=>{if(p=='granted'){ls.s('ey_pn',1);ls.s('ey_pnl',Date.now());toast('Avisos activados');route();window.becPushSub&&window.becPushSub()}else toast('Permiso denegado en el navegador')})}
+function pnOff(){ls.s('ey_pn',0);window.becPushUnsub&&window.becPushUnsub();toast('Avisos desactivados');route()}
 function pnShow(t){window.becNotify&&window.becNotify('BEC',t,'js')}
 setInterval(()=>{try{if(!me||!users[me]||!ls.g('ey_pn',0)||!window.Notification||Notification.permission!='granted')return;const l=ls.g('ey_pnl',0),n=notes.filter(x=>x.to==me&&!x.r&&(x.ts||0)>l);if(!n.length)return;ls.s('ey_pnl',Math.max(...n.map(x=>x.ts||0)));if(document.hidden)n.slice(-3).forEach(x=>pnShow(x.t))}catch(e){}},6000);
 /* Verificación y calificación de empresas */
@@ -1315,7 +1315,8 @@ let cart=ls.g('ey_cart',[]);const sc=()=>ls.s('ey_cart',cart),itm=id=>MK.concat(
 window.mkBuy=id=>{const x=itm(id);if(!x)return;if(x.ex)return toast('Es un ejemplo. Publica el tuyo para recibir pedidos.');if(x.o==me)return toast('Es tu publicación');const c=cart.find(i=>i.id==id);c?c.q++:cart.push({id,q:1});sc();toast('🛒 Agregado al carrito');fab()};
 window.cq=(id,d)=>{const c=cart.find(i=>i.id==id);if(!c)return;c.q+=d;if(c.q<1)cart=cart.filter(i=>i!==c);sc();cartScr();fab()};
 window.cartScr=()=>{window._cg=null;const L=cart.map(i=>({i,x:itm(i.id)})).filter(r=>r.x),t=L.reduce((s,r)=>s+pn2(r.x.pr)*r.i.q,0);
-scr('🛒 Carrito',L.length?L.map(r=>`<div class="card"><h3>${esc(r.x.t)}</h3><p>${esc(r.x.s)} · ${esc(r.x.pr)}</p><div class="row"><button class="s" onclick="cq('${r.i.id}',-1)">−</button><p class="c" style="align-self:center">${r.i.q}</p><button class="s" onclick="cq('${r.i.id}',1)">+</button></div></div>`).join('')+`<div class="card"><h3>Total: ${money(t)}</h3><label>Entrega</label><select id="co1"><option value="ent">A domicilio</option><option value="ret">Retiro en el local</option></select><label>Dirección / referencia</label><textarea id="co2" rows="2"></textarea><button class="s" onclick="coGeo()">📍 Usar mi ubicación</button><label>Pago</label><select id="co3"><option value="cash">Efectivo contra entrega</option><option value="tr">Transferencia (confirma el vendedor)</option>${CF.card?'<option value="card">Tarjeta</option>':''}</select><div class="err" id="coe"></div><button onclick="placeOrd()">Confirmar pedido</button></div>`:'<div class="card"><p>Tu carrito está vacío.</p></div>')};
+const nq=L.reduce((a,r)=>a+r.i.q,0);
+scr('🛒 Carrito',L.length?`<p class="ct-sub">${nq} artículo${nq>1?'s':''} · revisa tu pedido antes de confirmar</p>`+L.map(r=>{const q=r.i.q;return `<div class="ct-it"><div class="ct-im">${r.x.k=='food'?'🍽️':'🛍️'}</div><div class="ct-in"><h3>${esc(r.x.t)}</h3><p>${esc(r.x.s)}</p><div class="ct-up">${esc(r.x.pr)} c/u</div><div class="ct-ft"><div class="ct-q"><button onclick="cq('${r.i.id}',-1)" aria-label="Quitar uno">−</button><span>${q}</span><button onclick="cq('${r.i.id}',1)" aria-label="Agregar uno">+</button></div><b class="ct-sb">${money(pn2(r.x.pr)*q)}</b></div></div><button class="ct-x" onclick="cq('${r.i.id}',-${q})" aria-label="Eliminar del carrito">✕</button></div>`}).join('')+`<div class="ct-box"><h3>Entrega</h3><select id="co1" style="display:none"><option value="ent">A domicilio</option><option value="ret">Retiro en el local</option></select><div class="ct-seg"><button class="on" onclick="ctPick('co1','ent',this)">🏠 A domicilio</button><button onclick="ctPick('co1','ret',this)">🏪 Retiro en el local</button></div><div id="ct-ad"><label>Dirección / referencia</label><textarea id="co2" rows="2" placeholder="Calle, número, sector y una referencia"></textarea><button class="ct-geo" onclick="coGeo()">📍 Usar mi ubicación</button></div></div><div class="ct-box"><h3>Forma de pago</h3><select id="co3" style="display:none"><option value="cash">Efectivo contra entrega</option><option value="tr">Transferencia (confirma el vendedor)</option>${CF.card?'<option value="card">Tarjeta</option>':''}</select><div class="ct-opts"><button class="on" onclick="ctPick('co3','cash',this)"><b>💵 Efectivo contra entrega</b><span>Pagas cuando recibes tu pedido</span></button><button onclick="ctPick('co3','tr',this)"><b>🏦 Transferencia</b><span>El vendedor confirma tu pago</span></button>${CF.card?`<button onclick="ctPick('co3','card',this)"><b>💳 Tarjeta</b><span>Pago seguro en línea</span></button>`:''}</div></div><div class="ct-box ct-sum"><div class="ct-r"><span>Subtotal</span><b>${money(t)}</b></div><div class="ct-r"><span>Entrega</span><b>Se coordina con el vendedor</b></div><div class="ct-r ct-tot"><span>Total</span><b>${money(t)}</b></div></div><div class="err" id="coe"></div><button class="ct-go" onclick="placeOrd()">Confirmar pedido · ${money(t)}</button><p class="ct-note">🔒 El vendedor confirma tu pedido y coordinan la entrega. No pagues por adelantado a desconocidos.</p>`:`<div class="ct-empty"><div class="ct-ei">🛒</div><h3>Tu carrito está vacío</h3><p>Agrega productos desde la tienda y aparecerán aquí.</p><button onclick="tab='shop';main()">Ir a la tienda</button></div>`)};
 window.placeOrd=()=>{if(needB(placeOrd))return;const md=$('#co1').value,ad=$('#co2').value.trim(),py=$('#co3').value,g=window._cg||null;if(md=='ent'&&ad.length<5&&!g)return $('#coe').textContent='Escribe tu dirección o usa tu ubicación.';
 const by={};cart.forEach(i=>{const x=itm(i.id);if(x&&x.o&&live(x))(by[x.o]=by[x.o]||[]).push({id:x.id,t:x.t,pr:x.pr,q:i.q})});
 Object.keys(by).forEach(o=>{if(((users[o]||{}).bl||[]).includes(me))delete by[o]});const ks=Object.keys(by);if(!ks.length)return toast('Esos productos ya no están disponibles');
@@ -4169,6 +4170,32 @@ window.adm=function(){
 })();
 </script>
 <script>
+/* Avisos push: registra este celular en Supabase para recibir notificaciones aunque BEC esté cerrada */
+window.BEC_VAPID='BI87HKPLBSvthUQtIaV_gV6CaUpTJp1i1pRQzEZcRAzgGLwPTQjTB4_YU9bowrI43dyEDLJxtthgeSsynFrkhfk';
+(function(){
+ function key(b){var p='='.repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(s),o=new Uint8Array(r.length);for(var i=0;i<r.length;i++)o[i]=r.charCodeAt(i);return o}
+ function ok(){return 'serviceWorker' in navigator&&'PushManager' in window&&window.Notification&&Notification.permission==='granted'&&window.jsSB&&window.jsSB.sess&&window.jsSB.sess()}
+ window.becPushSub=async function(){
+  try{
+   if(!ok())return false;
+   var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+   if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key(window.BEC_VAPID)});
+   var j=sub.toJSON();
+   var r=await window.jsSB.api('/rest/v1/rpc/register_push',{m:'POST',b:{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth}});
+   if(r.ok){try{localStorage.setItem('bec_ps','1')}catch(e){}return true}
+  }catch(e){}
+  return false};
+ window.becPushUnsub=async function(){
+  try{
+   var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+   if(sub){if(window.jsSB&&window.jsSB.sess&&window.jsSB.sess())await window.jsSB.api('/rest/v1/rpc/unregister_push',{m:'POST',b:{p_endpoint:sub.endpoint}});await sub.unsubscribe()}
+   localStorage.removeItem('bec_ps')
+  }catch(e){}};
+ /* Al abrir la app, si los avisos están activos, se vuelve a registrar el celular (por si cambió) */
+ [5000,20000].forEach(function(t){setTimeout(function(){try{if(localStorage.getItem('ey_pn')==='1')window.becPushSub()}catch(e){}},t)});
+})();
+</script>
+<script>
 /* Aviso con la marca BEC: nombre, logo, vibración y hora. Se muestra aunque la app esté en segundo plano. */
 window.becNotify=function(title,body,tag){
  var o={body:body,icon:'icon-192.png',badge:'badge-96.png',tag:tag||'bec',renotify:true,vibrate:[120,60,120],timestamp:Date.now(),lang:'es',data:{url:'./'}};
@@ -4178,6 +4205,51 @@ window.becNotify=function(title,body,tag){
  }catch(e){}
 };
 </script>
+<script>
+/* Carrito: selector de entrega y de pago (guarda el valor en el select oculto que usa el pedido) */
+window.ctPick=function(id,v,b){var s=document.getElementById(id);if(s)s.value=v;var p=b.parentNode;[].forEach.call(p.children,function(x){x.classList.toggle('on',x===b)});if(id==='co1'){var a=document.getElementById('ct-ad');if(a)a.style.display=v==='ent'?'':'none'}};
+</script>
+<style id="bec-cart">
+#app .ct-sub{margin:-4px 0 14px;font-size:13.5px;color:var(--mu)}
+#app .ct-it{position:relative;display:flex;gap:14px;background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:14px;margin-bottom:12px;box-shadow:var(--sh)}
+#app .ct-im{flex:none;width:64px;height:64px;border-radius:16px;display:grid;place-items:center;font-size:30px;background:linear-gradient(135deg,color-mix(in srgb,var(--pr) 16%,var(--card)),color-mix(in srgb,var(--g2,var(--pr)) 10%,var(--card)));border:1px solid var(--bd)}
+#app .ct-in{flex:1;min-width:0}
+#app .ct-in h3{margin:0 28px 2px 0;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
+#app .ct-in p{margin:0;font-size:13px;color:var(--mu)}
+#app .ct-up{margin-top:2px;font-size:12.5px;color:var(--mu)}
+#app .ct-ft{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+#app .ct-q{display:inline-flex;align-items:center;border:1px solid var(--bd);border-radius:999px;background:color-mix(in srgb,var(--pr) 6%,var(--card));overflow:hidden}
+#app .ct-q button{width:38px!important;height:38px!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:var(--pr)!important;font-size:20px!important;font-weight:700;line-height:1}
+#app .ct-q span{min-width:28px;text-align:center;font-weight:700;font-size:15px;color:var(--tx)}
+#app .ct-sb{font-size:16px;color:var(--tx);white-space:nowrap}
+#app .ct-x{position:absolute!important;top:8px;right:8px;width:30px!important;height:30px!important;min-height:0!important;margin:0!important;padding:0!important;border-radius:50%!important;border:0!important;background:transparent!important;box-shadow:none!important;color:var(--mu)!important;font-size:14px!important}
+#app .ct-x:active{background:color-mix(in srgb,#ef4444 14%,transparent)!important;color:#ef4444!important}
+#app .ct-box{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:var(--sh)}
+#app .ct-box h3{margin:0 0 12px;font-size:15px;letter-spacing:.01em}
+#app .ct-box label{display:block;margin:14px 0 6px;font-size:12.5px;font-weight:600;color:var(--mu)}
+#app .ct-box textarea{width:100%;box-sizing:border-box;min-height:84px;border-radius:14px;resize:vertical}
+#app .ct-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border-radius:16px;background:color-mix(in srgb,var(--pr) 7%,var(--card));border:1px solid var(--bd)}
+#app .ct-seg button{margin:0!important;min-height:44px!important;padding:8px 6px!important;border-radius:12px!important;border:0!important;background:transparent!important;box-shadow:none!important;color:var(--mu)!important;font-size:13.5px!important;font-weight:600}
+#app .ct-seg button.on{background:var(--card)!important;color:var(--pr)!important;box-shadow:0 1px 6px rgba(15,23,42,.18)!important}
+#app .ct-geo{width:100%!important;margin:10px 0 0!important;min-height:44px!important;border-radius:14px!important;background:transparent!important;border:1px dashed var(--pr)!important;color:var(--pr)!important;box-shadow:none!important;font-size:14px!important;font-weight:600}
+#app .ct-opts{display:grid;gap:8px}
+#app .ct-opts button{display:flex!important;flex-direction:column;align-items:flex-start;gap:2px;width:100%;margin:0!important;padding:13px 14px!important;text-align:left;border-radius:16px!important;border:1.5px solid var(--bd)!important;background:var(--card)!important;box-shadow:none!important;color:var(--tx)!important;font-weight:400}
+#app .ct-opts button b{font-size:14.5px}
+#app .ct-opts button span{font-size:12.5px;color:var(--mu)}
+#app .ct-opts button.on{border-color:var(--pr)!important;background:color-mix(in srgb,var(--pr) 9%,var(--card))!important}
+#app .ct-sum{padding:8px 16px}
+#app .ct-r{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;font-size:14px;color:var(--mu)}
+#app .ct-r b{color:var(--tx);font-weight:600;text-align:right}
+#app .ct-r+.ct-r{border-top:1px solid var(--bd)}
+#app .ct-tot{font-size:16px;color:var(--tx)}
+#app .ct-tot b{font-size:22px;font-weight:800}
+#app .ct-go{width:100%;margin:6px 0 0!important;min-height:54px!important;font-size:16.5px!important;font-weight:700}
+#app .ct-note{margin:12px 6px 4px;text-align:center;font-size:12.5px;line-height:1.45;color:var(--mu)}
+#app .ct-empty{text-align:center;padding:44px 20px;background:var(--card);border:1px solid var(--bd);border-radius:22px;box-shadow:var(--sh)}
+#app .ct-ei{width:76px;height:76px;margin:0 auto 14px;border-radius:24px;display:grid;place-items:center;font-size:36px;background:color-mix(in srgb,var(--pr) 12%,var(--card))}
+#app .ct-empty h3{margin:0 0 6px}
+#app .ct-empty p{margin:0 0 18px;color:var(--mu)}
+</style>
 <style id="bec-fix">
 /* Pie de página y barra inferior: el pie queda siempre debajo del contenido y nunca tapa la barra */
 html,body{min-height:100%}
