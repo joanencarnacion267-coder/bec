@@ -648,7 +648,7 @@ function out(){me=null;tab='empleos';ct='of';save();mode='login';auth()}
 function main(){
 const p=users[me].profile;let h='';
 if(tab!='perfil'&&!(MKC[tab]&&shopOn(capsOf(users[me])))&&tab!='reqs'&&!navFor().some(t=>t[0]==tab))tab='hub';
-if(tab=='empleos')h=`<h2>Hola, ${esc(p.nm)} 👋</h2>${steps()}${pcTip()}${remind()}<div class="safe">🛡️ <b>Tu seguridad primero:</b> nunca pagues por una entrevista ni compartas tu cédula o cuenta bancaria por chat. Reporta con 🚩 cualquier oferta sospechosa.</div><input id="sj" class="sr" placeholder="🔍 Buscar puesto, empresa o modalidad" oninput="flt(this.value)"><div class="chips cc">${['Todos','Guardados',...CATS].map(c=>`<div class="chip cir ${c==cf?'on':''}" data-c="${c}" onclick="setCat('${c}')"><b>${CE[c]}</b><span>${c}</span></div>`).join('')}</div><div class="row"><select onchange="setP(this.value)" style="margin-bottom:12px">${provOpts(fp,1)}</select><select onchange="setM(this.value)" style="margin-bottom:12px" aria-label="Modalidad">${['Todas','Presencial','Remoto','Híbrido'].map(x=>`<option ${x==mf?'selected':''}>${x}</option>`).join('')}</select></div><select onchange="setH(this.value)" style="margin-bottom:12px" aria-label="Horario">${['Todos','Tiempo completo','Medio tiempo','Por días','Turnos'].map(x=>`<option ${x==hf?'selected':''}>${x}</option>`).join('')}</select><button class="s" style="margin:0 0 10px" onclick="alSave()">🔔 Avisarme de nuevas ofertas como esta</button><p>Pulsa “Postularme” y se enviará tu perfil a la empresa.</p><br>`+feedJobs().map(j=>{const s=sent.includes(me+j.id);
+if(tab=='empleos')h=`<h2>Empleos</h2>${steps()}${pcTip()}${remind()}<div class="safe">🛡️ <b>Tu seguridad primero:</b> nunca pagues por una entrevista ni compartas tu cédula o cuenta bancaria por chat. Reporta con 🚩 cualquier oferta sospechosa.</div><input id="sj" class="sr" placeholder="🔍 Buscar puesto, empresa o modalidad" oninput="flt(this.value)"><div class="chips cc">${['Todos','Guardados',...CATS].map(c=>`<div class="chip cir ${c==cf?'on':''}" data-c="${c}" onclick="setCat('${c}')"><b>${CE[c]}</b><span>${c}</span></div>`).join('')}</div><div class="row"><select onchange="setP(this.value)" style="margin-bottom:12px">${provOpts(fp,1)}</select><select onchange="setM(this.value)" style="margin-bottom:12px" aria-label="Modalidad">${['Todas','Presencial','Remoto','Híbrido'].map(x=>`<option ${x==mf?'selected':''}>${x}</option>`).join('')}</select></div><select onchange="setH(this.value)" style="margin-bottom:12px" aria-label="Horario">${['Todos','Tiempo completo','Medio tiempo','Por días','Turnos'].map(x=>`<option ${x==hf?'selected':''}>${x}</option>`).join('')}</select><button class="s" style="margin:0 0 10px" onclick="alSave()">🔔 Avisarme de nuevas ofertas como esta</button><p>Pulsa “Postularme” y se enviará tu perfil a la empresa.</p><br>`+feedJobs().map(j=>{const s=sent.includes(me+j.id);
 return `<div class="card jb" data-k="j${j.id}" data-c="${esc(j.c||'Otros')}" data-p="${esc(j.pv||'')}" data-t="${esc((j.r+' '+j.e+' '+j.l+' '+(j.sc||'')+' '+(j.hr||'')).toLowerCase())}">${acts('j'+j.id,'j',j.id)}<div class="jh"><div class="av">${j.i}</div><div><h3>${esc(j.r)}</h3><p>${esc(j.e)}${j.ft?' · ⭐ Destacada':''}${verB(j.o)}${coStars(j.o)}</p></div></div><span class="tag">📍 ${j.l}${j.pv?' · '+esc(j.pv):''}${j.sc?' · '+esc(j.sc):''}</span>${j.hr?`<span class="tag">🕒 ${esc(j.hr)}${j.hd?' · '+esc(j.hd):''}</span>`:''}${j.o?'':'<span class="tag">Ejemplo</span>'}<span class="tag">💰 ${j.s}</span><p>${esc(j.d)}</p>
 <button ${s?'disabled':''} onclick="apply('${j.id}')">${s?'✓ Perfil enviado':'Postularme'}</button>${jwa(j)}<div class="row"><button class="s" onclick="shr('j','${j.id}')">🔗 Compartir</button><button class="s" style="border-color:var(--bd);color:var(--mu)" onclick="repForm('j','${j.id}')">🚩 Reportar</button></div></div>`}).join('');
 if(tab=='indep')h=`<h2>${users[me].role=='cl'?'Servicios disponibles':'Trabajos independientes'}</h2><p>${users[me].role=='cl'?'Elige un servicio, indica la fecha y las horas, y listo. No necesitas publicar nada.':'Ofrece tus servicios sin necesidad de una empresa.'}</p><br>
@@ -828,7 +828,7 @@ function mkList(t){return mkItems(t).map(x=>`<div class="card">${mkPics(x)}<h3>$
 function mkS(v){mkq=v;const e=$('#mkl');if(e)e.innerHTML=mkList(mkSub)}
 function mkF(){mkf=!mkf;main()}
 function mkGo(k){mkSub=k;tab='shop';main()}
-function mkHub(){const p=users[me].profile||{},c=capsOf(users[me]),T=[['empleos','💼','Empleos','Empresas y trabajadores'],['indep','🛠️','Servicios','Profesionales y clientes'],['prod','🛍️','Tienda','Comercios y compradores']].filter(x=>x[0]=='empleos'?c.seek:x[0]=='indep'?(c.offer||c.req):shopOn(c));if(c.hire&&users[me].alt)T.push(['emp','🏢','Publicar ofertas','Contrata personal']);return `<h2>Hola, ${esc(p.nm||me.split('@')[0])} 👋</h2><p>¿Qué necesitas hoy?</p><br><div class="tiles">${T.map(x=>`<div class="card tile" onclick="${x[0]=='emp'?'swMode()':MKC[x[0]]?`mkGo('${x[0]}')`:`tab='${x[0]}';main()`}"><b>${x[1]}</b><h3>${x[2]}</h3><p>${x[3]}</p></div>`).join('')}</div><p class="c" style="margin:14px 0 4px;font-size:13px">Dentro de Tienda: 🛍️ Productos · 🍔 Comida · 👕 Ropa</p><p class="c" style="margin:0 0 12px;font-weight:700;color:var(--pr)">Una cuenta · Una plataforma · Múltiples oportunidades</p><div class="safe">🛡️ <b>Compra y paga con cuidado:</b> no envíes dinero por adelantado a desconocidos y coordina la entrega en lugares seguros.</div>`}
+function mkHub(){const p=users[me].profile||{},c=capsOf(users[me]),T=[['empleos','💼','Empleos','Empresas y trabajadores'],['indep','🛠️','Servicios','Profesionales y clientes'],['prod','🛍️','Tienda','Comercios y compradores']].filter(x=>x[0]=='empleos'?c.seek:x[0]=='indep'?(c.offer||c.req):shopOn(c));if(c.hire&&users[me].alt)T.push(['emp','🏢','Publicar ofertas','Contrata personal']);return `<h2>Inicio</h2><p>¿Qué necesitas hoy?</p><br><div class="tiles">${T.map(x=>`<div class="card tile" onclick="${x[0]=='emp'?'swMode()':MKC[x[0]]?`mkGo('${x[0]}')`:`tab='${x[0]}';main()`}"><b>${x[1]}</b><h3>${x[2]}</h3><p>${x[3]}</p></div>`).join('')}</div><p class="c" style="margin:14px 0 4px;font-size:13px">Dentro de Tienda: 🛍️ Productos · 🍔 Comida · 👕 Ropa</p><p class="c" style="margin:0 0 12px;font-weight:700;color:var(--pr)">Una cuenta · Una plataforma · Múltiples oportunidades</p><div class="safe">🛡️ <b>Compra y paga con cuidado:</b> no envíes dinero por adelantado a desconocidos y coordina la entrega en lugares seguros.</div>`}
 function mkTab(t){if(t=='hub')return mkHub();if(MKC[t]){mkSub=t;tab='shop'}t=mkSub;if(mkT!=t){mkT=t;mkq='';mkf=0;mkImgs=[]}const c=MKC[t],p=users[me].profile||{};return `<h2>Tienda</h2><div class="chips">${Object.keys(MKC).map(k=>`<div class="chip ${k==t?'on':''}" onclick="mkGo('${k}')">${MKC[k].e} ${MKC[k].n}</div>`).join('')}</div><input class="sr" placeholder="🔍 Buscar en ${c.n.toLowerCase()}" value="${esc(mkq)}" oninput="mkS(this.value)"><button onclick="mkF()">${mkf?'✕ Cerrar':'➕ Publicar en '+c.n}</button>`+(mkf?`<div class="fx"><div class="fx-hd"><div class="fx-bi">${icSvg('bag')}</div><div><h3>Nueva publicación en ${c.n}</h3><p>Los campos con <b>*</b> son obligatorios.</p></div></div><div class="fx-bd">
 <div class="fx-s"><div class="fx-st"><i>1</i><span>Producto</span></div>
 <label class="fx-l" for="mkt">${t=='food'?'Plato o combo':'Nombre del artículo'} <span class="rq">*</span></label><input id="mkt" maxlength="100" placeholder="${t=='food'?'Ej: Combo de pollo asado':'Ej: Camisa de algodón talla M'}">
@@ -882,7 +882,7 @@ function alertsFor(j){const t=(j.r+' '+j.e+' '+j.l).toLowerCase();Object.entries
 function pnBtn(){const on=ls.g('ey_pn',0)&&window.Notification&&Notification.permission=='granted';return `<button class="s" onclick="${on?'pnOff()':'pnOn()'}">🔔 Avisos en el celular: ${on?'Activados':'Desactivados'}</button>`}
 function pnOn(){if(!window.Notification)return toast('Tu navegador no soporta avisos');Notification.requestPermission().then(p=>{if(p=='granted'){ls.s('ey_pn',1);ls.s('ey_pnl',Date.now());toast('Avisos activados');route()}else toast('Permiso denegado en el navegador')})}
 function pnOff(){ls.s('ey_pn',0);toast('Avisos desactivados');route()}
-function pnShow(t){const o={body:t,icon:'',tag:'js'};navigator.serviceWorker&&navigator.serviceWorker.getRegistration?navigator.serviceWorker.getRegistration().then(r=>r?r.showNotification('BEC',o):new Notification('BEC',o)).catch(()=>{}):new Notification('BEC',o)}
+function pnShow(t){window.becNotify&&window.becNotify('BEC',t,'js')}
 setInterval(()=>{try{if(!me||!users[me]||!ls.g('ey_pn',0)||!window.Notification||Notification.permission!='granted')return;const l=ls.g('ey_pnl',0),n=notes.filter(x=>x.to==me&&!x.r&&(x.ts||0)>l);if(!n.length)return;ls.s('ey_pnl',Math.max(...n.map(x=>x.ts||0)));if(document.hidden)n.slice(-3).forEach(x=>pnShow(x.t))}catch(e){}},6000);
 /* Verificación y calificación de empresas */
 function admVf(e){users[e].vf=!users[e].vf;save();admin()}
@@ -1171,7 +1171,7 @@ else{const x=MK.concat(MKS).find(a=>a.id==id);if(!x)return;mkSub=x.k;mkq='';mkpv
 
 route();
 if(dl&&!(me&&users[me]))pub();
-try{if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(a=>a.forEach(r=>r.unregister())).catch(()=>{});if(window.caches)caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}catch(e){}
+try{if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(a=>a.forEach(r=>{const u=(r.active||r.waiting||r.installing||{}).scriptURL||'';if(!/\/sw\.js(\?|$)/.test(u))r.unregister()})).catch(()=>{});navigator.serviceWorker.register('sw.js').catch(()=>{})}if(window.caches)caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}catch(e){}
 
 const hx=a=>[...new Uint8Array(a)].map(x=>x.toString(16).padStart(2,'0')).join('');
 async function pbk(p,salt,it){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveBits']);return hx(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:salt,iterations:it},k,256))}
@@ -3771,8 +3771,8 @@ window.notGo=id=>{const x=notes.find(n=>n.id==id&&n.to==me);if(!x)return;x.r=1;s
   case'ord':if(window.ordScr)return ordScr();return route();
   default:return route()}}catch(e){route()}};
 window.pnShow=function(t){const n=[...notes].reverse().find(x=>x.t==t);if(n)enrich(n);
- const title='BEC · '+(n?n.ti:'Aviso'),body=n?(n.m+(n.fn?' — '+n.fn:'')):clean(t),o={body,icon:'',tag:'js-'+(n?n.id:now())};
- try{navigator.serviceWorker&&navigator.serviceWorker.getRegistration?navigator.serviceWorker.getRegistration().then(r=>r?r.showNotification(title,o):new Notification(title,o)).catch(()=>{}):new Notification(title,o)}catch(e){}};
+ const body=n?((n.ti?n.ti+'\n':'')+n.m+(n.fn?' — '+n.fn:'')):clean(t);
+ try{window.becNotify('BEC',body,'js-'+(n?n.id:now()))}catch(e){}};
 })();
 </script>
 
@@ -4168,4 +4168,34 @@ window.adm=function(){
 };
 })();
 </script>
-</body></html>
+<script>
+/* Aviso con la marca BEC: nombre, logo, vibración y hora. Se muestra aunque la app esté en segundo plano. */
+window.becNotify=function(title,body,tag){
+ var o={body:body,icon:'icon-192.png',badge:'badge-96.png',tag:tag||'bec',renotify:true,vibrate:[120,60,120],timestamp:Date.now(),lang:'es',data:{url:'./'}};
+ try{
+  if('serviceWorker' in navigator&&navigator.serviceWorker.ready){navigator.serviceWorker.ready.then(function(r){return r.showNotification(title,o)}).catch(function(){try{new Notification(title,o)}catch(e){}})}
+  else if(window.Notification)new Notification(title,o);
+ }catch(e){}
+};
+</script>
+<style id="bec-fix">
+/* Pie de página y barra inferior: el pie queda siempre debajo del contenido y nunca tapa la barra */
+html,body{min-height:100%}
+body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+#app{flex:1 0 auto;width:100%;position:relative;z-index:1}
+#ft{flex:none;width:100%;max-width:520px;margin:0 auto!important;position:relative;z-index:0;
+ padding:20px 16px calc(24px + env(safe-area-inset-bottom,0px))!important;
+ border-top:1px solid var(--bd);font-size:11.5px;line-height:1.5;color:var(--mu)}
+body.hasnav #ft{padding-bottom:calc(var(--nh,76px) + 28px + env(safe-area-inset-bottom,0px))!important}
+#ft p{margin:4px 0!important;font-size:11.5px!important}
+#ft p:first-child{display:flex;flex-wrap:wrap;justify-content:center;gap:0 10px}
+#ft p:first-child a{color:var(--mu);text-decoration:none;font-weight:600;padding:6px 2px}
+#ft p:first-child a:active{color:var(--pr)}
+#ft p:first-child{font-size:0!important}
+#ft p:first-child a{font-size:11.5px;white-space:nowrap}
+#ft p:last-child{opacity:.8}
+html body nav{z-index:60!important;pointer-events:auto!important}
+html body nav>a{pointer-events:auto!important}
+/* La barra inferior siempre visible (ya no se esconde al deslizar) */
+html body nav.nv-h{translate:none!important}
+</style></body></html>
