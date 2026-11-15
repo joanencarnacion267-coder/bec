@@ -304,6 +304,88 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flush()});
 })();
 </script>
 <script>
+/* ===== BEC Centinela: detecta fallos antes que los usuarios y dice cómo arreglarlos =====
+   1) Diagnóstico: traduce cada error a causa + solución.  2) Chequeos de salud proactivos (conexión, tablas, sesión, almacenamiento, botones rotos, pantalla trabada).
+   3) Vigila todas las llamadas a Supabase.  4) Mensaje amable al usuario.  5) Panel 🩺 solo para el administrador. */
+(()=>{
+const KD='bec_diag',R=[
+[/row-level security|42501|permission denied/i,'Una política RLS de Supabase bloquea esta acción.','Supabase → Authentication → Policies: en la tabla afectada crea una política para el rol authenticated (INSERT/UPDATE/SELECT) con user_id = auth.uid().'],
+[/PGRST205|42P01|does not exist.*relation|relation.*does not exist|find the table/i,'La tabla no existe en Supabase.','Ejecuta en SQL Editor supabase_schema_BEC.sql o el .sql del último paquete y luego Settings → API → Reload schema.'],
+[/PGRST204|42703|column.*does not exist|find the .* column/i,'Falta una columna: el código y la base están desalineados.','Ejecuta el .sql más reciente (ADD COLUMN IF NOT EXISTS) y recarga el esquema de la API.'],
+[/jwt|token.*expired|invalid.*token|refresh_token/i,'La sesión expiró o el token no es válido.','El usuario debe iniciar sesión de nuevo. Si ocurre seguido, revisa Auth → Settings → JWT expiry.'],
+[/23505|duplicate key|already exists/i,'Registro duplicado (clave única).','Valida antes de insertar o usa upsert con on_conflict.'],
+[/23503|foreign key/i,'Se referencia un registro que no existe (llave foránea).','Crea primero el registro padre (perfil/empresa) o corrige el id enviado.'],
+[/bucket not found|storage.*404/i,'El bucket de Storage no existe o no es accesible.','Storage → crea el bucket (media, kyc) y añade sus políticas.'],
+[/413|too large/i,'El archivo es demasiado grande.','Comprime la imagen antes de subirla o sube el límite del bucket.'],
+[/429|rate limit|too many/i,'Demasiadas peticiones en poco tiempo.','Añade espera entre envíos (debounce) y evita bucles de sincronización.'],
+[/quota|almacenamiento lleno/i,'El almacenamiento del navegador está lleno.','Reduce fotos guardadas en localStorage; mueve los archivos a Supabase Storage.'],
+[/failed to fetch|networkerror|load failed|abort|timeout/i,'Sin conexión o el servidor tardó demasiado.','Revisa la red; si es solo en tu app, abre el panel de Supabase: el plan Free pausa proyectos inactivos (Restore project).'],
+[/HTTP 5\d\d|internal server|unavailable|paused/i,'Supabase está caído o pausado.','supabase.com/dashboard → BEC-OFICIAL → Restore. Revisa Logs → API.'],
+[/HTTP 40[13]/i,'Petición sin permiso (sesión vencida o política faltante).','Cierra sesión y entra de nuevo; si persiste, revisa RLS de esa tabla.'],
+[/HTTP 404/i,'El recurso (tabla, función o archivo) no existe.','Verifica el nombre en el código contra el esquema SQL instalado.'],
+[/is not defined|is not a function|botón sin función/i,'Un botón llama a una función que no existe.','Define esa función o corrige el nombre en el onclick (el mensaje indica cuál).'],
+[/reading '|cannot read|of null|of undefined/i,'El código usa un dato vacío (null/undefined).','Abre el archivo:línea indicado y protege con if(x) o x?.campo.']],
+dg=m=>{m=String(m||'');for(const r of R)if(r[0].test(m))return{c:r[1],s:r[2]};return{c:'Causa no catalogada.',s:'Revisa el archivo:línea y el stack; reproduce la acción con la consola abierta.'}},
+ld=()=>{try{return JSON.parse(localStorage.getItem(KD)||'[]')}catch(e){return[]}},
+sv=a=>{try{localStorage.setItem(KD,JSON.stringify(a.slice(-60)))}catch(e){}},
+esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
+SBc=()=>window.jsSB||{},seen={};let health=[],lastSnack=0;
+function note(msg,src,sev){msg=String(msg).slice(0,240);const k=msg+src;if(seen[k])return;seen[k]=1;const d=dg(msg),a=ld();
+ a.push({t:Date.now(),msg,src:String(src||''),sev:sev||'error',c:d.c,s:d.s});sv(a);
+ if(sev!=='info'&&window.becReportError)try{window.becReportError(msg+' → '+d.s.slice(0,110),src)}catch(e){}badge()}
+/* Mensaje amable (máx. 1 cada 20 s) */
+function snack(t){if(Date.now()-lastSnack<2e4)return;lastSnack=Date.now();const e=document.createElement('div');e.setAttribute('role','alert');
+ e.style.cssText='position:fixed;left:14px;right:14px;bottom:96px;z-index:9998;background:#7f1d1d;color:#fff;padding:12px 14px;border-radius:14px;font-size:14px;text-align:center;box-shadow:0 10px 26px rgba(0,0,0,.35)';
+ e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),5000)}
+addEventListener('error',e=>{if(e.target&&e.target!==window){const t=e.target;if(/IMG|SCRIPT|LINK/.test(t.tagName||''))note('Recurso no carga: '+(t.src||t.href||'').slice(0,120),'recurso','warn');return}
+ note(e.message,(e.filename||'').split('/').pop()+':'+e.lineno);snack('Algo no salió bien. Ya lo registramos; intenta de nuevo.')},true);
+addEventListener('unhandledrejection',e=>{const r=e.reason;note((r&&r.message)||String(r),'promesa');snack('No se pudo completar la acción. Revisa tu conexión e inténtalo otra vez.')});
+/* Vigilancia de todas las llamadas a Supabase */
+const f0=window.fetch;window.fetch=function(u,o){const t=Date.now(),url=String(u&&u.url||u),m=((o&&o.method)||'GET').toUpperCase(),p=url.replace(/^https?:\/\/[^/]+/,'').split('?')[0];
+ if(/error_log/.test(url)||/\/auth\/v1\//.test(url))return f0.apply(this,arguments);
+ return f0.apply(this,arguments).then(r=>{const ms=Date.now()-t;
+  if(!r.ok&&r.status>=400)r.clone().text().then(b=>note('HTTP '+r.status+' '+m+' '+p+' '+b.slice(0,140),'supabase')).catch(()=>{});
+  else if(ms>5000)note('Respuesta lenta ('+ms+' ms) '+m+' '+p,'rendimiento','warn');return r},e=>{note('Sin respuesta: '+m+' '+p+' ('+(e&&e.message)+')','red');throw e})};
+/* Chequeos de salud proactivos */
+async function chk(){const out=[],ok=(n,g,d)=>{out.push({n,g,d});if(!g)note(n+': '+d,'salud',/pausa|caído/i.test(d)?'error':'warn')},SB=SBc();
+ ok('Configuración Supabase',!!(SB.U&&SB.K),'Faltan URL/clave: revisa window.jsSB y JS_CFG.');
+ if(SB.U&&SB.K){const H={apikey:SB.K,Authorization:'Bearer '+((SB.sess&&SB.sess()&&SB.sess().at)||SB.K)};let t=Date.now();
+  try{const r=await f0(SB.U+'/auth/v1/health',{headers:H});t=Date.now()-t;ok('Conexión a Supabase ('+t+' ms)',r.ok&&t<4000,r.ok?'Respuesta lenta, revisa región/plan.':(r.status>=500?'Servidor caído o pausado (HTTP '+r.status+').':'Supabase respondió HTTP '+r.status+': revisa la URL y la clave anon.'))}catch(e){ok('Conexión a Supabase',false,'No responde: red caída o proyecto pausado.')}
+  const tb=[...new Set([...document.scripts].map(s=>s.textContent).join(' ').match(/\/rest\/v1\/[a-z_]+/g)||[])].map(x=>x.slice(9)).filter(x=>x!=='error_log').slice(0,20);
+  await Promise.all(tb.map(async n=>{try{const r=await f0(SB.U+'/rest/v1/'+n+'?select=*&limit=1',{headers:H});
+   ok('Tabla '+n,r.ok||r.status==401||r.status==403,r.status==404?'La tabla no existe: ejecuta el SQL BEC.':'Error HTTP '+r.status)}catch(e){}}));
+  const s=SB.sess&&SB.sess();if(s&&s.exp)ok('Sesión vigente',s.exp>Date.now()-6e4,'La sesión venció: volver a iniciar sesión.')}
+ let b=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);b+=(k.length+(localStorage.getItem(k)||'').length)*2}}catch(e){}ok('Almacenamiento local ('+(b/1048576).toFixed(1)+' MB)',b<4.2e6,'Casi lleno (límite ~5 MB): mover fotos a Storage.');
+ const names=new Set();document.querySelectorAll('[onclick]').forEach(e=>{const m=/^\s*(?:return\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(e.getAttribute('onclick'));if(m)names.add(m[1])});
+ names.forEach(n=>{if((()=>{try{return(0,eval)('typeof '+n)!=='function'}catch(e){return false}})()&&!/^(this|event|if|confirm|alert)$/.test(n))ok('Botón sin función: '+n+'()',false,'botón sin función: '+n+' no está definida.')});
+ const ids={};document.querySelectorAll('[id]').forEach(e=>ids[e.id]=(ids[e.id]||0)+1);const du=Object.keys(ids).filter(i=>ids[i]>1);ok('IDs únicos',!du.length,'IDs repetidos ('+du.slice(0,4).join(', ')+'): un botón puede actuar sobre el campo equivocado.');
+ const bi=[...document.images].filter(i=>i.complete&&i.src&&!i.naturalWidth).length;ok('Imágenes',!bi,bi+' imagen(es) rotas: enlace caducado o archivo borrado.');
+ health=out;D.health=out;badge();return out}
+let tm=0;new MutationObserver(()=>{clearTimeout(tm);tm=setTimeout(()=>{const a=document.getElementById('app');if(a&&a.querySelector('.skw'))return;chk()},4000)}).observe(document.documentElement,{childList:true,subtree:true});
+setTimeout(chk,3000);setInterval(chk,3e5);
+setTimeout(()=>{const a=document.getElementById('app');if(a&&a.querySelector('.skw')){note('La pantalla inicial quedó cargando','arranque');
+ a.innerHTML='<div class="c" style="padding:30vh 20px 0"><h3>No pudimos cargar la app</h3><p class="m">Revisa tu conexión e inténtalo de nuevo.</p><button onclick="location.reload()">Recargar</button></div>'}},15000);
+/* Panel del administrador */
+const D=window.becDiag={health:[],run:chk,report:()=>ld()};
+let bt;function badge(){if(!bt)return;const n=ld().filter(x=>x.sev==='error').length+health.filter(x=>!x.g).length;bt.dataset.n=n;bt.textContent='🩺'+(n?' '+n:'')}
+function adm(){try{return !!((window.jsIsAdmin&&window.jsIsAdmin())||(typeof isA!=='undefined'&&isA))}catch(e){return false}}
+function panel(rows){let o=document.getElementById('bec-dg');if(o)o.remove();o=document.createElement('div');o.id='bec-dg';
+ o.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);overflow:auto;padding:14px';
+ const L=ld().slice().reverse(),it=x=>'<div style="border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0"><b style="color:'+(x.sev==='error'?'#dc2626':'#d97706')+'">'+esc(x.msg)+'</b><div class=m style="font-size:12px">'+esc(x.src)+' · '+new Date(x.t).toLocaleString()+'</div><p style="margin:6px 0 2px"><b>Causa:</b> '+esc(x.c)+'</p><p style="margin:0"><b>Solución:</b> '+esc(x.s)+'</p></div>';
+ o.innerHTML='<div class="card" style="max-width:620px;margin:0 auto"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">🩺 Salud de BEC</h3><button class="s" style="width:auto;margin:0" id="dgx">✕</button></div>'+
+ '<p class=m style="font-size:13px">Chequeos automáticos cada 5 min en cada dispositivo.</p>'+health.map(h=>'<div style="padding:4px 0">'+(h.g?'✅':'❌')+' '+esc(h.n)+(h.g?'':'<div class=m style="font-size:12px;margin-left:24px">→ '+esc(h.d)+'</div>')+'</div>').join('')+
+ '<h4>Problemas detectados con solución</h4>'+(L.length?L.map(it).join(''):'<p class=ok>Sin problemas registrados.</p>')+
+ (rows?'<h4>Errores de usuarios (servidor)</h4>'+(rows.length?rows.map(r=>it(Object.assign({sev:'error',t:Date.parse(r.created_at)||0,msg:r.msg,src:(r.src||'')+' '+(r.user_email||'')},dg(r.msg+' '+r.src).c?{c:dg(r.msg).c,s:dg(r.msg).s}:{}))).join(''):'<p class=ok>Ninguno.</p>'):'')+
+ '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button id="dgr">Re-diagnosticar</button><button class="s" id="dgs">Errores de usuarios</button><button class="s" id="dgc">Copiar informe</button><button class="s" id="dgl">Limpiar</button></div></div>';
+ document.body.appendChild(o);const g=i=>o.querySelector(i);g('#dgx').onclick=()=>o.remove();
+ g('#dgr').onclick=async()=>{await chk();panel(rows)};
+ g('#dgs').onclick=async()=>{const B=SBc();try{const r=await f0(B.U+'/rest/v1/error_log?select=*&order=created_at.desc&limit=40',{headers:{apikey:B.K,Authorization:'Bearer '+((B.sess&&B.sess()&&B.sess().at)||B.K)}});panel(r.ok?await r.json():[])}catch(e){panel([])}};
+ g('#dgc').onclick=()=>{const t=ld().map(x=>'['+x.sev+'] '+x.msg+'\n  Causa: '+x.c+'\n  Solución: '+x.s).join('\n\n');try{navigator.clipboard.writeText(t);g('#dgc').textContent='Copiado ✓'}catch(e){}};
+ g('#dgl').onclick=()=>{sv([]);for(const k in seen)delete seen[k];panel(rows)}}
+setInterval(()=>{const a=adm();if(a&&!bt){bt=document.createElement('button');bt.id='bec-dgb';bt.setAttribute('aria-label','Salud del sistema');bt.style.cssText='position:fixed;left:12px;bottom:calc(90px + env(safe-area-inset-bottom,0px));z-index:9997;width:auto;margin:0;padding:8px 12px;border-radius:999px;font-size:13px';bt.onclick=()=>panel();document.body.appendChild(bt);badge()}else if(!a&&bt){bt.remove();bt=null}},2000);
+})();
+</script>
+<script>
 /* Seguridad: acepta solo URLs/imagenes seguras en src="..." (evita inyeccion de codigo desde perfiles de otros usuarios) */
 window.safeSrc=function(v){v=String(v==null?'':v);return(/["'<>`\s]/.test(v)||/^\s*javascript:/i.test(v))?'':v};
 </script>
@@ -4047,6 +4129,149 @@ button.s.busy::after{border-color:var(--pr);border-top-color:transparent}
  if(location.hash=='#estados')setTimeout(function(){try{window.bsGallery()}catch(e){}},900);
 })();
 </script>
+<script id="vf-v1-js">
+(function(){
+/* BEC · Centro de verificación (usuario + administrador). Todo permiso real lo valida el backend (verificacion_backend.sql). */
+var SB=function(){return window.jsSB},E=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var app=function(){return document.getElementById('app')},isAd=function(){try{return !!(window.jsIsAdmin&&window.jsIsAdmin())}catch(e){return false}};
+var TY={personal:'Cuenta personal',emprendimiento:'Emprendimiento',informal:'Negocio informal',formal:'Empresa formal'};
+var ST={draft:['Borrador','#64748b'],pending:['Pendiente','#b45309'],in_review:['En revisión','#2563eb'],verified:['Verificada','#15803d'],rejected:['Rechazada','#b91c1c'],required:['Verificación requerida','#b45309'],more_info:['Faltan documentos','#b45309']};
+var ERR={duplicate_identity:'Ese número de cédula o RNC ya está registrado en otra cuenta.',bad_id_number:'El número debe tener entre 9 y 13 dígitos.',locked:'Tu solicitud ya está en revisión y no se puede editar.',auth_required:'Vuelve a iniciar sesión.',forbidden:'No tienes permiso para esta acción.',mfa_required:'Activa y confirma la verificación en dos pasos para revisar solicitudes.',self_review:'No puedes revisar tu propia solicitud.',reason_required:'Escribe el motivo.',bad_state:'La solicitud cambió de estado. Actualiza la lista.'};
+var V={req:null,me:null,type:null,data:{},docs:{},ced:'',prev:{},t:0};
+var $=function(s){return document.querySelector(s)};
+function top(t,b){return '<div class="top"><button class="s" style="width:auto;margin:0" onclick="'+(b||'route()')+'">←</button><h2 style="margin:0">'+t+'</h2></div>'}
+function msg(t){try{toast(t)}catch(e){alert(t)}}
+async function rpc(n,b){var r;try{r=await SB().api('/rest/v1/rpc/'+n,{m:'POST',b:b||{}})}catch(e){throw new Error('Sin conexión. Revisa tu internet.')}
+ if(!r.ok){var m=(r.j&&(r.j.message||r.j.msg))||'',k=Object.keys(ERR).filter(function(x){return m.indexOf(x)>=0})[0],mm=/missing:([\w,]+)/.exec(m);
+  if(mm){var L=((V.req||{})[V.type]||{fields:[]}).fields;throw new Error('Falta completar: '+mm[1].split(',').map(function(x){var f=L.filter(function(y){return y.k==x})[0];return f?f.label:x}).join(', '))}
+  throw new Error(k?ERR[k]:(r.s==404?'El sistema de verificación aún no está instalado en el servidor (falta ejecutar verificacion_backend.sql).':'No se pudo completar. Inténtalo de nuevo.'))}
+ return r.j}
+async function load(){var q=await SB().api('/rest/v1/vf_requirements?select=*');if(!q.ok)throw new Error('El sistema de verificación aún no está instalado en el servidor (falta ejecutar verificacion_backend.sql).');
+ V.req={};q.j.forEach(function(x){V.req[x.account_type]=x});V.me=await rpc('vf_status');
+ if(V.me){V.data=V.me.data||{};V.docs=V.me.docs||{}}else{V.data={};V.docs={}}
+ try{if(V.me&&V.me.status=='verified'&&users[me]&&!users[me].vf){users[me].vf=true;save()}}catch(e){}}
+function myType(){var u=(window.users&&users[me])||{},a=u.acct;if(V.me&&V.me.account_type&&V.me.status!='required')return V.me.account_type;return a=='ent'?'emprendimiento':a=='biz'?(V.type=='formal'?'formal':'informal'):'personal'}
+function done(f){return f.type=='file'?!!V.docs[f.k]:f.type=='id'?(V.ced.replace(/\D/g,'').length>=9||!!(V.me&&V.me.id_last4)):!!String(V.data[f.k]||'').trim()}
+function fields(){return((V.req[V.type]||{}).fields||[]).filter(function(f){return f.req||true})}
+function chip(s){var x=ST[s]||ST.draft;return '<span class="vf-chip" style="--c:'+x[1]+'">'+x[0]+'</span>'}
+/* ---------- pantalla del usuario ---------- */
+window.kycForm=window.vfOpen=async function(force){
+ app().innerHTML=top('Verificación')+'<div class="card"><div class="sk"></div><div class="sk"></div></div>';
+ try{await load()}catch(e){app().innerHTML=top('Verificación')+'<div class="bs-state err"><div class="bs-ic">⚠️</div><h3>No disponible</h3><p>'+E(e.message)+'</p></div>';return}
+ var u=users[me]||{},s=V.me&&V.me.status;V.type=u.acct=='biz'?(V.me&&V.me.account_type=='formal'?'formal':(V.type=='formal'?'formal':'informal')):myType();
+ if(!force&&s&&['pending','in_review','verified'].indexOf(s)>=0)return stView();
+ if(!force&&['rejected','more_info','required'].indexOf(s)>=0)return stView();
+ if(!force&&!s&&V.type=='personal')return intro();
+ form()};
+function intro(){app().innerHTML=top('Verificación')+'<div class="vf-hero"><div class="vf-ic2">✅</div><h3>Tu cuenta está confirmada</h3><p>Puedes comprar, contratar y postularte con normalidad. Solo te pediremos verificar tu identidad si una operación de mayor riesgo, un cambio de seguridad o actividad inusual lo requiere.</p><button class="s" onclick="vfOpen(true)">Verificar mi identidad ahora</button></div>'+sec()}
+function stView(){var s=V.me.status,r=V.me,x=ST[s],ty=TY[r.account_type],b='';
+ var ic={pending:'⏳',in_review:'🔎',verified:'✅',rejected:'⚠️',required:'🛡️',more_info:'📎'}[s],h={pending:'Solicitud enviada',in_review:'Estamos revisando tu solicitud',verified:'¡Cuenta verificada!',rejected:'No pudimos verificar tu cuenta',required:'Necesitamos verificar tu identidad',more_info:'Necesitamos más información'}[s];
+ var p={pending:'Un administrador la revisará pronto. Normalmente tarda menos de 24 horas.',in_review:'Un administrador está comprobando tus documentos. Te avisamos aquí apenas haya respuesta.',verified:r.account_type=='personal'?'Tu identidad está confirmada.':'Ya puedes publicar productos, servicios y recibir pedidos o reservas. No volveremos a pedirte estos documentos.',rejected:'Puedes corregir los documentos y volver a enviarlos. Tu progreso se conserva.',required:{high_amount:'Por el monto de la operación, necesitamos confirmar tu identidad. Solo se pide una vez.',suspicious_activity:'Detectamos actividad inusual y, por seguridad, necesitamos confirmar tu identidad.'}[r.required_reason]||'Para continuar necesitamos confirmar tu identidad. Solo se pide una vez.',more_info:'Un administrador pidió información adicional para completar la revisión.'}[s];
+ if(r.reject_reason&&(s=='rejected'||s=='more_info'))b='<div class="vf-why"><b>'+(s=='rejected'?'Motivo del rechazo':'Qué falta')+'</b><span>'+E(r.reject_reason)+'</span></div>';
+ var tl=['Enviada','En revisión','Resultado'],i=s=='pending'?0:s=='in_review'?1:s=='verified'||s=='rejected'?2:-1;
+ var l=i<0?'':'<ol class="vf-tl">'+tl.map(function(t,k){return '<li class="'+(k<i?'done':k==i?'now':'')+'"><i></i>'+t+'</li>'}).join('')+'</ol>';
+ var btn=['rejected','more_info','required'].indexOf(s)>=0?'<button onclick="vfOpen(true)">'+(s=='required'?'Comenzar verificación':'Corregir y volver a enviar')+'</button>':s=='verified'?'<button onclick="route()">Ir al inicio</button>':'';
+ app().innerHTML=top('Verificación')+'<div class="vf-hero"><div class="vf-ic2">'+ic+'</div>'+chip(s)+'<h3>'+h+'</h3><p>'+p+'</p>'+b+l+'<small class="m">'+E(ty)+'</small>'+btn+'</div>'+sec()}
+function form(){var F=fields(),L=V.req[V.type]||{fields:[]},u=users[me]||{};
+ var kind=u.acct=='biz'?'<div class="vf-seg"><button class="'+(V.type=='informal'?'on':'')+'" onclick="vfKind(\'informal\')">Negocio informal</button><button class="'+(V.type=='formal'?'on':'')+'" onclick="vfKind(\'formal\')">Empresa formal</button></div><p class="m" style="font-size:13px">'+(V.type=='formal'?'Para empresas constituidas: RNC, Registro Mercantil y documentación legal.':'Para negocios sin constitución legal: no necesitas documentos empresariales.')+'</p>':'';
+ var ban=V.me&&V.me.reject_reason?'<div class="vf-why"><b>Revisión anterior</b><span>'+E(V.me.reject_reason)+'</span></div>':'';
+ var dat=F.filter(function(f){return f.type!='file'}),fil=F.filter(function(f){return f.type=='file'});
+ app().innerHTML=top(TY[V.type]==TY.personal?'Verificar identidad':'Verificar '+TY[V.type].toLowerCase(),'vfOpen()')+'<div class="card">'+kind+ban+'<div class="vf-pg"><div><b id="vf-pn"></b><small id="vf-sv" class="m"></small></div><div class="vf-bar"><i id="vf-pb"></i></div></div>'+
+ '<p class="m" style="font-size:13px">Tus documentos se guardan en un espacio privado y cifrado; solo los ve personal autorizado. Se piden una sola vez y tu avance se guarda automáticamente.</p>'+
+ (dat.length?'<h4 class="vf-h">1 · Datos</h4>'+dat.map(fld).join(''):'')+'<h4 class="vf-h">'+(dat.length?'2':'1')+' · Documentos y fotos</h4>'+fil.map(fld).join('')+
+ '<ul class="vf-tips"><li>Fotos nítidas, con buena luz y sin recortar esquinas.</li><li>No uses filtros ni edites las imágenes.</li><li>En la selfie, tu rostro debe verse de frente y completo.</li></ul><div class="err" id="vf-e" role="alert"></div><button id="vf-go" onclick="vfSend()">Enviar a revisión</button></div>'+sec();prog()}
+function fld(f){var v=V.data[f.k]||'',L='<label for="vf-'+f.k+'">'+E(f.label)+(f.req?'':' (opcional)')+'</label>';
+ if(f.type=='file'){var h=V.docs[f.k];return '<label class="vf-up'+(h?' has':'')+'" id="vfu-'+f.k+'"><span>'+(h?'✓':f.k=='selfie'?'🤳':'📷')+'</span><div><b>'+E(f.label)+'</b><small>'+(h?'Subido · toca para cambiarlo':'Toca para subir una foto')+'</small></div><input type="file" accept="image/*'+(V.type=='formal'?',application/pdf':'')+'" '+(f.k=='selfie'?'capture="user" ':'')+'onchange="vfPick(this,\''+f.k+'\')"></label>'}
+ if(f.type=='id')return L+'<input id="vf-id" inputmode="numeric" maxlength="15" autocomplete="off" placeholder="'+(V.me&&V.me.id_last4?'Guardado · termina en '+E(V.me.id_last4):'Solo números')+'" oninput="vfIn(null,this.value)">';
+ if(f.type=='area')return L+'<textarea id="vf-'+f.k+'" rows="3" maxlength="500" oninput="vfIn(\''+f.k+'\',this.value)">'+E(v)+'</textarea>';
+ return L+'<input id="vf-'+f.k+'" type="'+(f.type=='tel'?'tel':f.type=='email'?'email':'text')+'" maxlength="120" value="'+E(v)+'" oninput="vfIn(\''+f.k+'\',this.value)">'}
+function prog(){var F=fields().filter(function(f){return f.req}),n=F.filter(done).length,p=$('#vf-pn'),b=$('#vf-pb'),g=$('#vf-go');if(p)p.textContent=n+' de '+F.length+' requisitos completos';if(b)b.style.width=(F.length?n*100/F.length:0)+'%';if(g)g.disabled=n<F.length}
+function saved(ok){var s=$('#vf-sv');if(s)s.textContent=ok?' · Guardado '+new Date().toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'}):' · No se pudo guardar'}
+async function persist(){var c=V.ced;try{await rpc('vf_save',{p_type:V.type,p_data:V.data,p_docs:V.docs,p_ced:c||null});if(c){V.me=V.me||{};V.me.id_last4=c.replace(/\D/g,'').slice(-4);V.ced=''}saved(true);return true}catch(e){saved(false);var x=$('#vf-e');if(x)x.textContent=e.message;return false}}
+window.vfIn=function(k,v){if(k)V.data[k]=v;else V.ced=v;prog();clearTimeout(V.t);V.t=setTimeout(persist,900)};
+window.vfKind=function(k){V.type=k;persist().then(function(){form()})};
+function img(f){return new Promise(function(ok,no){if(f.type=='application/pdf'){if(f.size>6e6)return no(new Error('El PDF pesa más de 6 MB.'));return ok({b:f,ext:'pdf',ct:'application/pdf'})}
+ var i=new Image,u=URL.createObjectURL(f);i.onerror=function(){no(new Error('No se pudo leer esa imagen.'))};i.onload=function(){if(Math.min(i.width,i.height)<500)return no(new Error('La foto es muy pequeña: acércate y usa mejor resolución.'));
+  var k=Math.min(1,1400/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);c.toBlob(function(b){b?ok({b:b,ext:'jpg',ct:'image/jpeg'}):no(new Error('No se pudo procesar la foto.'))},'image/jpeg',.85)};i.src=u})}
+window.vfPick=async function(inp,k){var f=inp.files&&inp.files[0];if(!f)return;var l=$('#vfu-'+k),x=$('#vf-e');if(x)x.textContent='';if(l)l.classList.add('busy');
+ try{var o=await img(f),sb=SB(),s=sb.sess(),p=sb.uid()+'/'+V.type+'-'+k+'-'+Date.now()+'.'+o.ext,r=await fetch(sb.U+'/storage/v1/object/kyc/'+p,{method:'POST',headers:{apikey:sb.K,Authorization:'Bearer '+s.at,'Content-Type':o.ct},body:o.b});
+  if(!r.ok)throw new Error('No se pudo subir el archivo. Inténtalo de nuevo.');V.docs[k]=p;if(l){l.classList.add('has');l.querySelector('span').textContent='✓';l.querySelector('small').textContent='Subido · toca para cambiarlo'}prog();await persist()}
+ catch(e){if(x)x.textContent=e.message}finally{if(l)l.classList.remove('busy')}};
+window.vfSend=async function(){var b=$('#vf-go'),x=$('#vf-e');if(b)b.disabled=true;if(x)x.textContent='';clearTimeout(V.t);
+ try{if(!await persist())throw new Error($('#vf-e').textContent||'No se pudo guardar.');await rpc('vf_submit');try{window.notifyAdm&&notifyAdm('🛡️ '+(users[me].profile&&(users[me].profile.nm||users[me].profile.cn)||me)+' envió una verificación ('+TY[V.type]+'). Revísala en el Centro de verificaciones.')}catch(e){}msg('✓ Enviada a revisión');await load();stView()}
+ catch(e){if(x)x.textContent=e.message;prog()}};
+/* ---------- seguridad: teléfono, 2FA ---------- */
+function sec(){return '<div class="card" id="vf-sec"><h3 style="margin-top:0">🔐 Seguridad de la cuenta</h3><div class="vf-row"><span>✉️ Correo</span><b>'+((users[me]||{}).ver?'<span style="color:var(--ok)">Verificado</span>':'<a style="color:var(--pr);cursor:pointer" onclick="window.verScreen&&verScreen()">Verificar</a>')+'</b></div>'+
+ '<div class="vf-row"><span>📱 Teléfono</span><b id="vf-ph"><a style="color:var(--pr);cursor:pointer" onclick="vfPhone()">Verificar con código</a></b></div><div class="vf-row"><span>🔑 Verificación en dos pasos</span><b><a style="color:var(--pr);cursor:pointer" onclick="vfMfa()">Configurar</a></b></div><div id="vf-sb"></div></div>'}
+function box(h){var e=$('#vf-sb');if(e)e.innerHTML='<div class="vf-box">'+h+'</div>'}
+window.vfPhone=function(){box('<label>Número de teléfono (con código de país)</label><input id="vf-tel" type="tel" placeholder="+1 809 000 0000"><div class="err" id="vf-pe"></div><button onclick="vfPhone2()">Enviar código por SMS</button>')};
+window.vfPhone2=async function(){var p=($('#vf-tel').value||'').replace(/[^\d+]/g,''),e=$('#vf-pe');if(p.replace(/\D/g,'').length<10){e.textContent='Escribe un número válido.';return}
+ var r=await SB().api('/auth/v1/user',{m:'PUT',b:{phone:p}});if(!r.ok){e.textContent='No se pudo enviar el código. Verifica el número y que el envío de SMS esté activado en tu proyecto de Supabase (Authentication → Providers → Phone).';return}
+ box('<p>Enviamos un código a <b>'+E(p)+'</b>.</p><input id="vf-code" inputmode="numeric" maxlength="8" placeholder="Código"><div class="err" id="vf-pe"></div><button onclick="vfPhone3(\''+E(p)+'\')">Confirmar teléfono</button>')};
+window.vfPhone3=async function(p){var r=await SB().api('/auth/v1/verify',{m:'POST',b:{type:'phone_change',phone:p,token:($('#vf-code').value||'').trim()}});if(!r.ok){$('#vf-pe').textContent='Código incorrecto o vencido.';return}
+ try{rpc('vf_report',{p_kind:'phone_change'})}catch(e){}var h=$('#vf-ph');if(h)h.innerHTML='<span style="color:var(--ok)">Verificado</span>';box('<p class="ok">✓ Teléfono verificado.</p>')};
+window.vfMfa=async function(){var r=await SB().api('/auth/v1/factors',{m:'POST',b:{factor_type:'totp',friendly_name:'BEC '+Date.now()}});
+ if(!r.ok||!r.j||!r.j.totp){box('<p class="err">No se pudo iniciar. Activa MFA (TOTP) en Supabase → Authentication → Sign In / Providers → Multi-Factor.</p>');return}
+ V.f=r.j.id;box('<p>1. En Google Authenticator, Authy o similar elige <b>Introducir clave</b>.<br>2. Escribe esta clave:</p><p style="font-family:monospace;word-break:break-all;user-select:all"><b>'+E(r.j.totp.secret)+'</b></p><p>3. Escribe el código de 6 dígitos:</p><input id="vf-code" inputmode="numeric" maxlength="6"><div class="err" id="vf-pe"></div><button onclick="vfMfa2()">Activar</button>')};
+window.vfMfa2=async function(){var c=await SB().api('/auth/v1/factors/'+V.f+'/challenge',{m:'POST'});if(!c.ok){$('#vf-pe').textContent='No se pudo validar. Inténtalo de nuevo.';return}
+ var v=await SB().api('/auth/v1/factors/'+V.f+'/verify',{m:'POST',b:{challenge_id:c.j.id,code:($('#vf-code').value||'').trim()}});if(!v.ok){$('#vf-pe').textContent='Código incorrecto.';return}box('<p class="ok">✓ Verificación en dos pasos activada.</p>')};
+/* ---------- control de acceso en la interfaz (el backend vuelve a validar) ---------- */
+var GATE={addJob:'publish',addSvc:'publish',mkAdd:'publish',placeOrd:'buy',reqSvc:'book',quoteReq:'book'};
+function amt(){try{var m=/Total[^\d]{0,12}RD\$\s*([\d.,]+)/i.exec(app().innerText||'');return m?parseFloat(m[1].replace(/,/g,'')):0}catch(e){return 0}}
+Object.keys(GATE).forEach(function(f){var o=window[f];if(typeof o!='function')return;window[f]=function(){var a=arguments,t=this,u=(window.users&&users[me])||{};
+ if(isAd()||!SB()||!SB().sess||!SB().sess()||(GATE[f]=='publish'&&u.acct=='per'))return o.apply(t,a);
+ rpc('vf_check_operation',{p_kind:GATE[f]=='publish'?'publish':GATE[f],p_amount:GATE[f]=='buy'?amt():0}).then(function(r){
+  if(r&&r.ok===false){msg(r.need=='commerce'?'Para publicar y recibir pedidos, tu negocio debe estar verificado.':'Por seguridad, necesitamos verificar tu identidad.');return window.kycForm()}return o.apply(t,a)},function(){return o.apply(t,a)})}});
+/* ---------- Centro de verificaciones (administrador) ---------- */
+var A={tab:'q',ty:'',st:'',q:[]};
+function adTop(){return top('Centro de verificaciones','admin()')+'<div class="vf-seg">'+[['q','Solicitudes'],['h','Historial'],['r','Requisitos'],['c','Retención']].map(function(t){return '<button class="'+(A.tab==t[0]?'on':'')+'" onclick="vfTab(\''+t[0]+'\')">'+t[1]+'</button>'}).join('')+'</div>'}
+window.vfAdmin=async function(){if(!isAd())return;app().innerHTML=adTop()+'<div class="card"><div class="sk"></div></div>';
+ try{if(!V.req)await load()}catch(e){app().innerHTML=top('Centro de verificaciones','admin()')+'<div class="card err">'+E(e.message)+'</div>';return}
+ try{if(A.tab=='q')return aq();if(A.tab=='h')return ah();if(A.tab=='r')return ar();ac()}catch(e){app().innerHTML=adTop()+'<div class="card err">'+E(e.message)+'</div>'}};
+window.vfTab=function(t){A.tab=t;vfAdmin()};
+function nm(x){var d=x.data||{};return d.owner_name||d.legal_name||d.trade_name||d.business_name||x.email}
+async function aq(){A.q=await rpc('vf_queue',{p_type:A.ty||null,p_status:A.st||null});
+ var o=function(m,v){return Object.keys(m).map(function(k){return '<option value="'+k+'"'+(v==k?' selected':'')+'>'+(m[k][0]||m[k])+'</option>'}).join('')};
+ var pend=A.q.filter(function(x){return x.status=='pending'}).length;
+ app().innerHTML=adTop()+'<div class="card"><div style="display:flex;gap:8px"><select onchange="A_f(\'ty\',this.value)"><option value="">Todos los tipos</option>'+o(TY,A.ty)+'</select><select onchange="A_f(\'st\',this.value)"><option value="">Todos los estados</option>'+o(ST,A.st)+'</select></div><p class="m">'+pend+' pendiente'+(pend==1?'':'s')+' de revisar</p></div>'+
+ (A.q.length?A.q.map(function(x){return '<div class="card vf-li" onclick="vfDetail(\''+x.id+'\')"><div><b>'+E(nm(x))+'</b>'+(x.flagged?' <span title="Alerta de seguridad">⚠️</span>':'')+'<br><small class="m">'+E(x.email)+' · '+E(TY[x.account_type])+'</small></div>'+chip(x.status)+'</div>'}).join(''):'<div class="bs-state"><div class="bs-ic">📄</div><h3>Sin solicitudes</h3><p>Cuando alguien envíe una verificación aparecerá aquí.</p></div>')}
+window.A_f=function(k,v){A[k]=v;vfAdmin()};
+window.vfDetail=async function(id){var x=A.q.filter(function(y){return y.id==id})[0];if(!x)return;var L=((V.req[x.account_type]||{}).fields||[]),sb=SB();
+ var d=L.filter(function(f){return f.type!='file'&&f.type!='id'}).map(function(f){return '<p style="margin:4px 0"><span class="m">'+E(f.label)+':</span> '+E((x.data||{})[f.k]||'—')+'</p>'}).join('')+'<p style="margin:4px 0"><span class="m">Cédula/RNC:</span> •••'+E(x.id_last4||'—')+'</p>';
+ var o=document.createElement('div');o.id='vf-md';o.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.6);overflow:auto;padding:14px';
+ o.innerHTML='<div class="card" style="max-width:640px;margin:0 auto"><div style="display:flex;justify-content:space-between"><h3 style="margin:0">'+E(nm(x))+'</h3><button class="s" style="width:auto;margin:0" onclick="this.closest(\'#vf-md\').remove()">✕</button></div><p class="m">'+E(x.email)+' · '+E(TY[x.account_type])+' '+chip(x.status)+'</p>'+(x.flagged?'<div class="vf-why"><b>⚠️ Alerta de seguridad</b><span>Hay eventos sospechosos sin resolver para este usuario.</span></div>':'')+d+'<h4>Documentos</h4><div id="vf-dd">Cargando…</div><h4>Decisión</h4><textarea id="vf-rs" rows="2" placeholder="Motivo (obligatorio para rechazar o pedir documentos)"></textarea><div class="err" id="vf-ae"></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+ (x.status=='pending'?'<button class="s" onclick="vfAct(\''+id+'\',\'start\')">Iniciar revisión</button>':'')+((x.status=='pending'||x.status=='in_review')?'<button onclick="vfAct(\''+id+'\',\'approve\')">Aprobar</button><button class="s" onclick="vfAct(\''+id+'\',\'request_more\')">Pedir documentos</button><button class="s" style="color:var(--er)" onclick="vfAct(\''+id+'\',\'reject\')">Rechazar</button>':'')+'</div><h4>Historial</h4><div id="vf-hh">Cargando…</div></div>';
+ document.body.appendChild(o);
+ var h='';for(var k in x.docs||{}){var p=x.docs[k],lb=(L.filter(function(f){return f.k==k})[0]||{}).label||k,r=await sb.api('/storage/v1/object/sign/kyc/'+p,{m:'POST',b:{expiresIn:120}}),u=r.ok&&r.j.signedURL?sb.U+'/storage/v1'+r.j.signedURL:'';
+  h+='<p style="margin:10px 0 4px"><b>'+E(lb)+'</b></p>'+(u?(/\.pdf$/i.test(p)?'<a href="'+E(u)+'" target="_blank" rel="noopener">Abrir PDF (enlace de 2 min)</a>':'<img src="'+E(u)+'" alt="" style="width:100%;border-radius:12px">'):'<p class="err">No se pudo cargar.</p>')}
+ $('#vf-dd').innerHTML=h||'<p class="m">Sin documentos.</p>';
+ var ev=await sb.api('/rest/v1/vf_events?request_id=eq.'+id+'&order=created_at.desc&select=*');$('#vf-hh').innerHTML=ev.ok&&ev.j.length?ev.j.map(evh).join(''):'<p class="m">Sin movimientos.</p>'};
+var AC={submitted:'Envió la solicitud',start:'Inició la revisión',approve:'Aprobó',reject:'Rechazó',request_more:'Pidió documentos adicionales',required:'Verificación requerida',docs_purged:'Documentos eliminados por retención'};
+function evh(e){return '<p style="margin:6px 0"><b>'+E(AC[e.action]||e.action)+'</b>'+(e.reason?' — '+E(e.reason):'')+'<br><small class="m">'+E(e.actor_name||'sistema')+' · '+new Date(e.created_at).toLocaleString('es-DO')+'</small></p>'}
+window.vfAct=async function(id,a){var r=($('#vf-rs').value||'').trim(),e=$('#vf-ae');e.textContent='';if((a=='reject'||a=='request_more')&&!r){e.textContent='Escribe el motivo.';return}
+ if(a=='approve'&&!confirm('¿Confirmas que los documentos son válidos y corresponden a la persona o negocio?'))return;
+ try{var j=await rpc('vf_review',{p_id:id,p_action:a,p_reason:r||null});
+  if(a=='approve'||a=='reject'){try{if(users[j.email])users[j.email].vf=a=='approve';SB().api('/rest/v1/rpc/adm_user_set',{m:'POST',b:{p_email:j.email,p_patch:{vf:a=='approve'},p_reason:null}})}catch(_){}}
+  $('#vf-md').remove();msg('✓ Acción registrada');vfAdmin()}catch(x){e.textContent=x.message}};
+async function ah(){var q=await rpc('vf_queue',{}),mp={};q.forEach(function(x){mp[x.user_id]=x.email});var ev=await SB().api('/rest/v1/vf_events?order=created_at.desc&limit=100&select=*');
+ app().innerHTML=adTop()+'<div class="card"><h3 style="margin-top:0">Últimos 100 movimientos</h3>'+(ev.ok&&ev.j.length?ev.j.map(function(e){return evh(e).replace('</p>',' · <small class="m">Usuario: '+E(mp[e.user_id]||'—')+'</small></p>')}).join(''):'<p class="m">Sin movimientos.</p>')+'</div>'}
+async function ar(){var s=await SB().api('/rest/v1/vf_settings?select=key,value'),S={};(s.j||[]).forEach(function(x){S[x.key]=x.value});V.S=S;
+ app().innerHTML=adTop()+Object.keys(TY).map(function(t){var r=V.req[t];return '<div class="card"><h3 style="margin-top:0">'+TY[t]+'</h3>'+r.fields.map(function(f,i){return '<label class="ck"><input type="checkbox" data-t="'+t+'" data-i="'+i+'"'+(f.req?' checked':'')+'> '+E(f.label)+' <small class="m">(obligatorio)</small></label>'}).join('')+'<p class="m" style="margin-bottom:2px">Permisos al ser verificada</p>'+[['publish','Publicar productos, servicios y vacantes'],['receive_orders','Recibir pedidos y reservas'],['high_risk','Operaciones de alto riesgo']].map(function(c){return '<label class="ck"><input type="checkbox" data-t="'+t+'" data-c="'+c[0]+'"'+(r.can[c[0]]?' checked':'')+'> '+c[1]+'</label>'}).join('')+'<button onclick="vfSaveReq(\''+t+'\')">Guardar</button></div>'}).join('')}
+window.vfSaveReq=async function(t){var r=V.req[t],f=r.fields.map(function(x,i){var c=document.querySelector('input[data-t="'+t+'"][data-i="'+i+'"]');return Object.assign({},x,{req:!!(c&&c.checked)})}),can={};
+ ['publish','receive_orders','high_risk'].forEach(function(k){can[k]=!!document.querySelector('input[data-t="'+t+'"][data-c="'+k+'"]').checked});
+ var x=await SB().api('/rest/v1/vf_requirements?account_type=eq.'+t,{m:'PATCH',b:{fields:f,can:can,updated_at:new Date().toISOString()}});if(x.ok){r.fields=f;r.can=can;msg('✓ Requisitos guardados')}else msg('No se pudo guardar (¿tu usuario está en vf_staff?)')};
+async function ac(){var s=await SB().api('/rest/v1/vf_settings?select=key,value'),S={};(s.j||[]).forEach(function(x){S[x.key]=x.value});
+ var n=function(k,l){return '<label>'+l+'</label><input type="number" min="0" id="vs-'+k+'" value="'+E(S[k])+'">'};
+ app().innerHTML=adTop()+'<div class="card"><h3 style="margin-top:0">Reglas y retención</h3>'+n('high_risk_amount','Monto desde el cual un cliente debe verificar su identidad (RD$)')+n('retention_draft_days','Días para borrar borradores sin enviar')+n('retention_rejected_days','Días para borrar documentos de solicitudes rechazadas')+n('retention_verified_days','Días para borrar documentos de cuentas verificadas')+
+ '<label class="ck"><input type="checkbox" id="vs-mfa"'+(S.require_admin_mfa===true?' checked':'')+'> Exigir verificación en dos pasos (aal2) a los administradores para revisar</label><p class="m" style="font-size:12px">Actívalo solo cuando tu inicio de sesión de administrador ya use 2FA.</p><div class="err" id="vs-e"></div><button onclick="vfSaveSet()">Guardar</button><button class="s" onclick="vfPurge()">Aplicar retención ahora</button></div>'}
+window.vfSaveSet=async function(){var rows=['high_risk_amount','retention_draft_days','retention_rejected_days','retention_verified_days'].map(function(k){return{key:k,value:+$('#vs-'+k).value||0}});rows.push({key:'require_admin_mfa',value:!!$('#vs-mfa').checked});
+ var r=await SB().api('/rest/v1/vf_settings?on_conflict=key',{m:'POST',b:rows,h:{Prefer:'resolution=merge-duplicates,return=minimal'}});msg(r.ok?'✓ Guardado':'No se pudo guardar')};
+window.vfPurge=async function(){if(!confirm('Se eliminarán los documentos que superaron su plazo de conservación. ¿Continuar?'))return;try{var j=await rpc('vf_purge'),p=j.paths||[];
+ if(p.length){var r=await SB().api('/storage/v1/object/kyc',{m:'DELETE',b:{prefixes:p}});if(!r.ok)return msg('No se pudieron borrar los archivos. Inténtalo de nuevo.');await rpc('vf_purge_ack',{p_paths:p})}msg('✓ '+p.length+' archivo(s) eliminados')}catch(e){msg(e.message)}};
+var ad0=window.admin;if(typeof ad0=='function')window.admin=function(){var r=ad0.apply(this,arguments);try{var h=document.querySelector('#app .adm')||app();if(h&&!document.getElementById('vf-ab')){var b=document.createElement('div');b.id='vf-ab';b.className='card vf-li';b.onclick=function(){window.vfAdmin()};b.innerHTML='<div><b>🛡️ Centro de verificaciones</b><br><small class="m">Revisar documentos, aprobar o rechazar y configurar requisitos</small></div><span>›</span>';h.insertBefore(b,h.children[1]||null)}}catch(e){}return r};
+var st=document.createElement('style');st.textContent='.vf-hero{text-align:center;padding:24px 18px;border-radius:22px;border:1px solid var(--bd);background:var(--card);margin-bottom:12px}.vf-ic2{width:68px;height:68px;margin:0 auto 10px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;background:var(--bg)}.vf-chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--c);border:1px solid var(--c)}.vf-why{text-align:left;border:1px solid var(--er);border-radius:14px;padding:10px 12px;margin:10px 0;font-size:14px}.vf-why b{display:block;color:var(--er);margin-bottom:2px}.vf-tl{list-style:none;display:flex;justify-content:center;gap:14px;padding:0;margin:14px 0;font-size:12px;color:var(--mu)}.vf-tl li i{display:block;width:12px;height:12px;border-radius:50%;background:var(--bd);margin:0 auto 4px}.vf-tl .done i,.vf-tl .now i{background:var(--ok)}.vf-tl .now{color:var(--tx);font-weight:700}.vf-pg{margin:6px 0 10px}.vf-bar{height:8px;border-radius:99px;background:var(--bd);overflow:hidden;margin-top:6px}.vf-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}.vf-h{margin:18px 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)}.vf-up{position:relative;display:flex;gap:12px;align-items:center;padding:12px;margin:8px 0;border:1.5px dashed var(--bd);border-radius:14px;cursor:pointer}.vf-up.has{border-style:solid;border-color:var(--ok)}.vf-up.busy{opacity:.5}.vf-up span{font-size:22px}.vf-up small{display:block;color:var(--mu)}.vf-up input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}.vf-tips{margin:10px 0;padding:10px 12px 10px 28px;border-radius:12px;background:var(--bg);font-size:13px;color:var(--mu)}.vf-seg{display:flex;gap:6px;margin:8px 0;overflow-x:auto}.vf-seg button{width:auto;margin:0;padding:8px 14px;border-radius:999px;background:var(--bg)!important;color:var(--tx)!important;border:1px solid var(--bd)!important;font-size:13px}.vf-seg button.on{background:var(--pr)!important;color:var(--pt)!important}.vf-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd);font-size:14px}.vf-box{margin-top:12px;padding:12px;border-radius:14px;background:var(--bg)}.vf-li{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}';document.head.appendChild(st);
+})();
+</script>
 
 <style id="a11y-v1">
 /* BEC · contraste y tamaño de letra (solo colores y tamaños) */
@@ -4182,17 +4407,38 @@ window.BEC_VAPID='BI87HKPLBSvthUQtIaV_gV6CaUpTJp1i1pRQzEZcRAzgGLwPTQjTB4_YU9bowr
    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key(window.BEC_VAPID)});
    var j=sub.toJSON();
    var r=await window.jsSB.api('/rest/v1/rpc/register_push',{m:'POST',b:{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth}});
-   if(r.ok){try{localStorage.setItem('bec_ps','1')}catch(e){}return true}
+   if(r.ok){try{localStorage.setItem('bec_ps','1');localStorage.setItem('bec_pe',window.jsSB.sess().em||'');localStorage.removeItem('bec_pn_off')}catch(e){}return true}
   }catch(e){}
   return false};
  window.becPushUnsub=async function(){
   try{
    var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
    if(sub){if(window.jsSB&&window.jsSB.sess&&window.jsSB.sess())await window.jsSB.api('/rest/v1/rpc/unregister_push',{m:'POST',b:{p_endpoint:sub.endpoint}});await sub.unsubscribe()}
-   localStorage.removeItem('bec_ps')
+   localStorage.removeItem('bec_ps');localStorage.removeItem('bec_pe');localStorage.setItem('bec_pn_off','1')
   }catch(e){}};
  /* Al abrir la app, si los avisos están activos, se vuelve a registrar el celular (por si cambió) */
- [5000,20000].forEach(function(t){setTimeout(function(){try{if(localStorage.getItem('ey_pn')==='1')window.becPushSub()}catch(e){}},t)});
+ /* Revisión automática: registra el celular de quien entre (aunque sea otra cuenta) y le invita a activar los avisos */
+ function banner(){
+  if(document.getElementById('bec-pn'))return;
+  var d=document.createElement('div');d.id='bec-pn';
+  d.innerHTML='<img src="icon-192.png" alt="" width="44" height="44"><div class="t"><b>Activa los avisos</b><span>Recibe mensajes, pedidos y citas aunque BEC esté cerrada.</span></div><div class="b"><button id="bec-pn-y">Activar</button><button id="bec-pn-n">Ahora no</button></div>';
+  document.body.appendChild(d);
+  document.getElementById('bec-pn-y').onclick=function(){d.remove();try{pnOn()}catch(e){}};
+  document.getElementById('bec-pn-n').onclick=function(){d.remove();try{localStorage.setItem('bec_pn_dis',String(Date.now()))}catch(e){}};
+ }
+ var last=0;
+ setInterval(function(){try{
+  if(typeof me==='undefined'||!me||!window.Notification||!window.jsSB||!window.jsSB.sess||!window.jsSB.sess())return;
+  var perm=Notification.permission,on=localStorage.getItem('ey_pn')==='1',off=localStorage.getItem('bec_pn_off')==='1';
+  if(perm==='granted'&&!off){
+   if(!on){localStorage.setItem('ey_pn','1');localStorage.setItem('ey_pnl',String(Date.now()))}
+   var em=window.jsSB.sess().em||'';
+   if((localStorage.getItem('bec_ps')!=='1'||localStorage.getItem('bec_pe')!==em)&&Date.now()-last>30000){last=Date.now();window.becPushSub()}
+  }else if(perm==='default'&&!on&&!off){
+   var dis=+localStorage.getItem('bec_pn_dis')||0;
+   if(Date.now()-dis>7*864e5&&!document.getElementById('tour')&&!document.getElementById('ovl'))banner();
+  }
+ }catch(e){}},4000);
 })();
 </script>
 <script>
@@ -4251,6 +4497,14 @@ window.ctPick=function(id,v,b){var s=document.getElementById(id);if(s)s.value=v;
 #app .ct-empty p{margin:0 0 18px;color:var(--mu)}
 </style>
 <style id="bec-fix">
+#bec-pn{position:fixed;left:12px;right:12px;bottom:calc(var(--nh,0px) + 16px + env(safe-area-inset-bottom,0px));z-index:55;display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:14px;border-radius:20px;background:var(--card);border:1px solid var(--bd);box-shadow:0 12px 34px rgba(15,23,42,.28);animation:fade .3s}
+#bec-pn img{border-radius:12px;flex:none}
+#bec-pn .t{flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px}
+#bec-pn .t b{font-size:15px;color:var(--tx)}
+#bec-pn .t span{font-size:12.5px;line-height:1.35;color:var(--mu)}
+#bec-pn .b{display:flex;gap:8px;width:100%}
+#bec-pn button{flex:1;width:auto!important;margin:0!important;min-height:42px!important;border-radius:999px!important;font-size:14px!important;font-weight:700}
+#bec-pn #bec-pn-n{background:transparent!important;color:var(--mu)!important;border:1px solid var(--bd)!important;box-shadow:none!important}
 /* Pie de página y barra inferior: el pie queda siempre debajo del contenido y nunca tapa la barra */
 html,body{min-height:100%}
 body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
